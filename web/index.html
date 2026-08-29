@@ -1,0 +1,828 @@
+<title>变频空调控制仿真台</title>
+<style>
+:root{
+  color-scheme:light;
+  --plane:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e;
+  --muted:#898781; --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+  --s-room:#2a78d6; --s-out:#eb6834; --s-cap:#1baf7a; --s-tes:#4a3aa7;
+  --band:rgba(42,120,214,.10); --callband:rgba(27,175,122,.10);
+  --chip:#f0efec; --accent:#2a78d6; --accent-ink:#fcfcfb;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --plane:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7;
+    --muted:#898781; --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+    --s-room:#3987e5; --s-out:#d95926; --s-cap:#199e70; --s-tes:#9085e9;
+    --band:rgba(57,135,229,.14); --callband:rgba(25,158,112,.14);
+    --chip:#26262a; --accent:#3987e5; --accent-ink:#0d0d0d;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --plane:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7;
+  --muted:#898781; --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+  --s-room:#3987e5; --s-out:#d95926; --s-cap:#199e70; --s-tes:#9085e9;
+  --band:rgba(57,135,229,.14); --callband:rgba(25,158,112,.14);
+  --chip:#26262a; --accent:#3987e5; --accent-ink:#0d0d0d;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font:14px/1.55 system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+button,select,input{font:inherit;color:inherit}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;
+  padding:12px 20px;border-bottom:1px solid var(--ring);background:var(--surface)}
+header h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.02em}
+header .sub{color:var(--muted);font-size:12px}
+.spacer{flex:1}
+.transport{display:flex;gap:8px;align-items:center}
+.transport .clock{font-variant-numeric:tabular-nums;color:var(--ink2);min-width:9em;text-align:right}
+.btn{border:1px solid var(--ring);background:var(--surface);border-radius:7px;
+  padding:6px 14px;cursor:pointer}
+.btn:hover{background:var(--chip)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.chiprow{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--ring);background:var(--chip);border-radius:999px;
+  padding:3px 12px;font-size:12px;cursor:pointer;color:var(--ink2)}
+.chip:hover{color:var(--ink)}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+.app{display:grid;grid-template-columns:308px 1fr;gap:16px;padding:16px 20px;max-width:1500px;margin:0 auto}
+@media (max-width:900px){.app{grid-template-columns:1fr}}
+
+aside{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:12px 14px}
+.panel h2{font-size:11px;margin:0 0 8px;color:var(--muted);font-weight:650;
+  text-transform:uppercase;letter-spacing:.09em}
+.param{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;margin:7px 0}
+.param label{color:var(--ink2);font-size:13px}
+.param .val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink)}
+.param input[type=range]{grid-column:1/3;width:100%;accent-color:var(--accent);margin:0}
+.radio-row{display:flex;gap:6px;margin:4px 0}
+.radio-row .chip{flex:1;text-align:center}
+.checkline{display:flex;gap:8px;align-items:center;color:var(--ink2);margin:8px 0 2px}
+.hint{color:var(--muted);font-size:12px;margin:6px 0 0}
+
+main{display:flex;flex-direction:column;gap:14px;min-width:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.kpi{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:9px 12px}
+.kpi .k{font-size:11px;color:var(--muted);letter-spacing:.04em}
+.kpi .v{font-size:21px;font-weight:650;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .u{font-size:11px;color:var(--ink2);font-weight:400;margin-left:2px}
+
+.chartcard{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:10px 12px 6px;position:relative}
+.chartcard .head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+.chartcard .head b{font-size:13px;font-weight:650}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--ink2)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+canvas{display:block;width:100%}
+.tooltip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--ring);
+  border-radius:7px;padding:6px 9px;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,.14);
+  display:none;z-index:5;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tooltip .tt-t{color:var(--muted);margin-bottom:2px}
+.tooltip .row{display:flex;gap:8px;justify-content:space-between}
+
+.duo{display:grid;grid-template-columns:1fr 340px;gap:14px}
+@media (max-width:1150px){.duo{grid-template-columns:1fr}}
+.state-pill{display:inline-block;border-radius:999px;padding:2px 12px;font-size:12px;font-weight:600;
+  background:var(--chip);color:var(--ink2)}
+.state-pill.up{background:var(--s-room);color:var(--accent-ink)}
+.state-pill.down{background:var(--s-out);color:var(--accent-ink)}
+.ratio-wrap{margin:10px 0 4px}
+.ratio-bar{position:relative;height:14px;border-radius:7px;background:var(--chip);overflow:hidden}
+.ratio-bar .fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);opacity:.85}
+.ratio-bar .tick{position:absolute;top:0;bottom:0;width:1px;background:var(--axis)}
+.ratio-scale{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+table.bins{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+table.bins th{color:var(--muted);font-weight:500;text-align:right;padding:3px 6px;border-bottom:1px solid var(--grid)}
+table.bins th:first-child,table.bins td:first-child{text-align:left}
+table.bins td{text-align:right;padding:3px 6px;border-bottom:1px solid var(--grid);color:var(--ink2)}
+table.bins td b{color:var(--ink);font-weight:600}
+.note{color:var(--muted);font-size:12px;line-height:1.6}
+</style>
+
+<header>
+  <div>
+    <h1>变频空调控制仿真台</h1>
+    <div class="sub">2R2C 房间模型 · 变频 DX 设备 · 温控器滞环 · V1.44 负荷预测 + Tes 自学习（内外机无通讯约束）</div>
+  </div>
+  <div class="chiprow" id="presets" aria-label="场景预设">
+    <button class="chip" data-p="s1">S1 设计日 35℃</button>
+    <button class="chip on" data-p="s2">S2 典型夏周</button>
+    <button class="chip" data-p="s3">S3 轻负荷季</button>
+    <button class="chip" data-p="s4">S4 阶跃准备</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="transport">
+    <span class="clock" id="clock">第 1 天 12:00</span>
+    <select id="speed" class="btn" aria-label="仿真速度">
+      <option value="60">×60（1s=1min）</option>
+      <option value="600">×600</option>
+      <option value="1800" selected>×1800（1s=30min）</option>
+      <option value="7200">×7200</option>
+      <option value="21600">×21600（1s=6h）</option>
+    </select>
+    <button class="btn primary" id="playBtn">暂停</button>
+    <button class="btn" id="resetBtn">重置</button>
+  </div>
+</header>
+
+<div class="app">
+<aside>
+  <div class="panel">
+    <h2>气候</h2>
+    <div class="param"><label>平均室外温度</label><span class="val"><span id="v_tmean"></span> ℃</span>
+      <input type="range" id="p_tmean" min="15" max="45" step="0.5"></div>
+    <div class="param"><label>日温度振幅</label><span class="val"><span id="v_tamp"></span> ℃</span>
+      <input type="range" id="p_tamp" min="0" max="10" step="0.5"></div>
+    <div class="param"><label>日照得热峰值</label><span class="val"><span id="v_solar"></span> kW</span>
+      <input type="range" id="p_solar" min="0" max="5" step="0.1"></div>
+  </div>
+  <div class="panel">
+    <h2>房屋（2R2C）</h2>
+    <div class="param"><label>围护传热 UA</label><span class="val"><span id="v_ua"></span> W/K</span>
+      <input type="range" id="p_ua" min="150" max="600" step="10"></div>
+    <div class="param"><label>空气热容</label><span class="val"><span id="v_cair"></span> MJ/K</span>
+      <input type="range" id="p_cair" min="1" max="8" step="0.5"></div>
+    <div class="param"><label>蓄热体热容</label><span class="val"><span id="v_cmass"></span> MJ/K</span>
+      <input type="range" id="p_cmass" min="10" max="80" step="5"></div>
+  </div>
+  <div class="panel">
+    <h2>温控器（算法不可见）</h2>
+    <div class="param"><label>设定温度</label><span class="val"><span id="v_tset"></span> ℃</span>
+      <input type="range" id="p_tset" min="20" max="28" step="0.5"></div>
+    <div class="param"><label>回差</label><span class="val"><span id="v_db"></span> °F</span>
+      <input type="range" id="p_db" min="0.5" max="3" step="0.25"></div>
+    <p class="hint">运行中直接拖动设定温度即可做阶跃实验（pull-down 达温观察）。</p>
+  </div>
+  <div class="panel">
+    <h2>设备</h2>
+    <div class="param"><label>额定制冷能力</label><span class="val"><span id="v_qr"></span> kW</span>
+      <input type="range" id="p_qr" min="3.5" max="12" step="0.25"></div>
+    <div class="param"><label>额定 COP</label><span class="val"><span id="v_cop"></span></span>
+      <input type="range" id="p_cop" min="2.5" max="4.5" step="0.05"></div>
+    <div class="param"><label>能力测量偏差（Gr×Δh 误差）</label><span class="val"><span id="v_bias"></span> %</span>
+      <input type="range" id="p_bias" min="-20" max="20" step="1"></div>
+  </div>
+  <div class="panel">
+    <h2>控制算法</h2>
+    <div class="radio-row" id="algoSel">
+      <button class="chip" data-a="A">A 定频</button>
+      <button class="chip" data-a="B">B 固定Tes</button>
+      <button class="chip on" data-a="C">C V1.44</button>
+    </div>
+    <div id="algoB" style="display:none">
+      <div class="param"><label>固定 Tes</label><span class="val"><span id="v_tesb"></span> ℃</span>
+        <input type="range" id="p_tesb" min="4" max="14" step="0.5"></div>
+    </div>
+    <div id="algoC">
+      <div class="param"><label>目标运转时间 TA</label><span class="val"><span id="v_ta"></span> min</span>
+        <input type="range" id="p_ta" min="20" max="120" step="5"></div>
+      <div class="param"><label>判定死区</label><span class="val">±<span id="v_dz"></span> %</span>
+        <input type="range" id="p_dz" min="10" max="40" step="5"></div>
+      <div class="param"><label>Tes 调整速率</label><span class="val"><span id="v_rate"></span> ℃/min</span>
+        <input type="range" id="p_rate" min="0.05" max="0.3" step="0.05"></div>
+      <div class="param"><label>每循环 Tes 限幅</label><span class="val"><span id="v_cyc"></span> ℃</span>
+        <input type="range" id="p_cyc" min="0.5" max="3" step="0.5"></div>
+      <label class="checkline"><input type="checkbox" id="p_pre" checked>预学习完成（跳过 7 天冷启动）</label>
+      <p class="hint">切换算法或预学习开关会重置统计指标与学习状态（房间状态保留）。</p>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>约束说明</h2>
+    <p class="note">北美替代市场内外机无通讯：算法层只能看到 thermo-on/off 时序、室外温度与外机自测能力（可加偏差）。室温、设定值、回差只对温控器模型可见——仿真忠实还原这一信息边界。</p>
+  </div>
+</aside>
+
+<main>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="chartcard">
+    <div class="head"><b>温度</b>
+      <span class="legend">
+        <span><i style="background:var(--s-room)"></i>室温</span>
+        <span><i style="background:var(--s-out)"></i>室外</span>
+        <span><i style="background:var(--band);border:1px solid var(--axis)"></i>设定带（设定±回差/2）</span>
+      </span>
+      <div class="spacer"></div>
+      <div class="chiprow" id="winSel">
+        <button class="chip" data-w="21600">6h</button>
+        <button class="chip on" data-w="86400">24h</button>
+        <button class="chip" data-w="259200">3天</button>
+        <button class="chip" data-w="0">全部</button>
+      </div>
+    </div>
+    <canvas id="chTemp" height="210"></canvas>
+    <div class="tooltip" id="ttTemp"></div>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>输出能力（显热）</b>
+      <span class="legend">
+        <span><i style="background:var(--s-cap)"></i>制冷能力 kW</span>
+        <span><i style="background:var(--callband);border:1px solid var(--axis)"></i>thermo-on 运转段</span>
+      </span>
+    </div>
+    <canvas id="chCap" height="130"></canvas>
+    <div class="tooltip" id="ttCap"></div>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>目标蒸发温度 Tes</b>
+      <span class="legend"><span><i style="background:var(--s-tes)"></i>Tes ℃（V1.44 分箱学习值）</span></span>
+    </div>
+    <canvas id="chTes" height="110"></canvas>
+    <div class="tooltip" id="ttTes"></div>
+  </div>
+
+  <div class="duo">
+    <div class="chartcard">
+      <div class="head"><b>逐循环 运转 t2 / 停机 t1</b>
+        <span class="legend">
+          <span><i style="background:var(--s-room)"></i>t2 运转（达温）min</span>
+          <span><i style="background:var(--muted)"></i>t1 停机 min</span>
+        </span>
+      </div>
+      <canvas id="chCyc" height="170"></canvas>
+      <div class="tooltip" id="ttCyc"></div>
+    </div>
+    <div class="chartcard" id="algoPanel">
+      <div class="head"><b>V1.44 内部状态</b><span class="state-pill" id="sigPill">信号 —</span></div>
+      <div class="ratio-wrap">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink2)">
+          <span>预测总能力 / 目标总负荷</span><b id="ratioTxt" style="font-variant-numeric:tabular-nums">—</b>
+        </div>
+        <div class="ratio-bar" id="ratioBar">
+          <div class="fill" id="ratioFill" style="width:0%"></div>
+          <div class="tick" style="left:40%"></div><div class="tick" style="left:45%"></div>
+          <div class="tick" style="left:55%"></div><div class="tick" style="left:60%"></div>
+        </div>
+        <div class="ratio-scale"><span>0</span><span>80%</span><span>90%</span><span>110%</span><span>120%</span><span>200%</span></div>
+      </div>
+      <div class="note" id="cycNow">—</div>
+      <div style="max-height:220px;overflow:auto;margin-top:8px">
+        <table class="bins" id="binTable"></table>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+"use strict";
+/* ================= 参数（滑杆实时读写） ================= */
+const P = {
+  tmean:30, tamp:5, solar:2.5,
+  ua:350, cair:3, cmass:40,
+  tset:24.5, db:1.0,
+  qr:7, cop:3.3, bias:0,
+  algo:"C", tesb:7,
+  ta:60, dz:20, rate:0.1, cyc:1.0, pre:true,
+};
+const DAY=86400, DT=10;
+
+/* ================= 物理模型（与 sim/ Python 版一致） ================= */
+function outdoorTemp(t){ return P.tmean + P.tamp*Math.cos(2*Math.PI*(t/DAY - 15/24)); }
+function solarGain(t){
+  const h=(t%DAY)/3600;
+  if(h<=6.5||h>=19.5) return 0;
+  return P.solar*1000*Math.sin(Math.PI*(h-6.5)/13);
+}
+const HOUSE_HM=500, HOUSE_FAIR=0.4, QINT=300;
+const DEV={tesNom:7, kqO:0.010, keO:0.020, kqT:-0.040, keT:0.028, tau:60, shr:0.75, copFix:3.0};
+
+function devCap(tout,tes,variable){
+  const fo=1+DEV.kqO*(35-tout), ft=variable?1+DEV.kqT*(tes-DEV.tesNom):1;
+  return Math.max(0,P.qr*1000*fo*ft);
+}
+function devCop(tout,tes,variable){
+  const base=variable?P.cop:DEV.copFix;
+  const fo=1+DEV.keO*(35-tout), ft=variable?1+DEV.keT*(tes-DEV.tesNom):1;
+  return Math.max(0.5,base*fo*ft);
+}
+
+/* ================= V1.44 学习器 ================= */
+const BIN_EDGES=[0,5,10,13,16,19,22,25,28,31,34,37,40,43,46];
+function tempBin(t){ for(let i=0;i<BIN_EDGES.length;i++) if(t<BIN_EDGES[i]) return i+1; return 16; }
+function binRange(b){
+  if(b===1)return "<0"; if(b===16)return "≥46";
+  return BIN_EDGES[b-2]+"~"+BIN_EDGES[b-1];
+}
+function isDay(t){ const h=(t%DAY)/3600; return h>=7&&h<19; }
+
+class BinStore{
+  constructor(pre){ this.samples=[]; this.coeff=null; this.lo=0; this.hi=0;
+    if(pre!=null){ for(let i=0;i<7;i++) this.samples.push(pre*(1+0.30*(i/6-0.5))); this.recompute(); } }
+  recompute(){
+    const d=this.samples;
+    if(d.length<7){ this.coeff=null; return; }
+    let best=d[0],bs=Infinity;
+    for(const a of d){ let s=0; for(const b of d) s+=Math.abs(a-b); if(s<bs){bs=s;best=a;} }
+    const keep=Math.max(1,Math.floor(d.length*0.7));
+    const kept=[...d].sort((x,y)=>Math.abs(x-best)-Math.abs(y-best)).slice(0,keep);
+    const c=kept.reduce((a,b)=>a+b,0)/kept.length;
+    this.coeff=c;
+    this.hi=(Math.max(...kept)-c)*1.2+c;
+    this.lo=(Math.min(...kept)-c)*1.2+c;
+  }
+  add(q){
+    if(this.coeff===null){
+      this.samples.push(q); if(this.samples.length>21)this.samples.shift();
+      this.recompute(); return;
+    }
+    if(q>=this.lo&&q<=this.hi){
+      let far=this.samples[0],fd=-1;
+      for(const s of this.samples){const d=Math.abs(s-this.coeff); if(d>fd){fd=d;far=s;}}
+      this.samples.splice(this.samples.indexOf(far),1);
+      this.samples.push(q); this.recompute();
+    }
+  }
+}
+
+class V144{
+  constructor(preQ){
+    this.bins=new Map(); this.tesStore=new Map(); this.preQ=preQ;
+    this.tes=DEV.tesNom; this.callPrev=false; this.started=false;
+    this.tOn=0; this.tOff=0; this.t1=0; this.entryBin=1; this.cycTes0=DEV.tesNom;
+    this.cycE=0; this.offInt=0; this.offKnown=true; this.target=null;
+    this.taEff=0; this.nextEval=0; this.sigUp=false; this.sigDown=false; this.ratio=null;
+  }
+  store(b,day){
+    const k=b+(day?"-d":"-n");
+    if(!this.bins.has(k)) this.bins.set(k,new BinStore(this.preQ));
+    return this.bins.get(k);
+  }
+  qCoeff(tout,t){ return this.store(tempBin(tout),isDay(t)).coeff; }
+  update(t,dt,call,tout,qmeas){
+    if(!this.started){ this.started=true; this.callPrev=call; if(call)this.tOn=t; else this.tOff=t; }
+    if(call&&!this.callPrev) this.thermoOn(t,tout);
+    else if(!call&&this.callPrev) this.thermoOff(t,tout);
+    this.callPrev=call;
+    if(!call){
+      const q=this.qCoeff(tout,t);
+      if(q===null) this.offKnown=false; else this.offInt+=q*dt;
+      return this.tes;
+    }
+    const run=t-this.tOn;
+    if(run>=180){
+      this.cycE+=qmeas*dt;
+      if(this.target!==null&&t>=this.nextEval){ this.nextEval=t+20; this.evaluate(run,qmeas); }
+    }
+    if(this.sigUp) this.tes-=P.rate*dt/60;
+    else if(this.sigDown) this.tes+=P.rate*dt/60;
+    const lo=Math.max(4,this.cycTes0-P.cyc), hi=Math.min(14,this.cycTes0+P.cyc);
+    this.tes=Math.min(hi,Math.max(lo,this.tes));
+    return this.tes;
+  }
+  thermoOn(t,tout){
+    const b=tempBin(tout);
+    this.entryBin=b;
+    this.tes=this.tesStore.has(b)?this.tesStore.get(b):DEV.tesNom;
+    this.cycTes0=this.tes;
+    this.tOn=t; this.t1=t-this.tOff; this.cycE=0; this.nextEval=t+20;
+    this.sigUp=this.sigDown=false; this.taEff=P.ta*60;
+    const q=this.qCoeff(tout,t);
+    if(q!==null&&this.offKnown){
+      let l1=this.offInt;
+      if(this.t1>7200) l1*=7200/Math.max(this.t1,1);
+      this.target=l1+q*P.ta*60;
+    } else this.target=null;
+  }
+  thermoOff(t,tout){
+    const t2=t-this.tOn;
+    if(this.target!==null) this.tesStore.set(this.entryBin,this.tes);
+    const t0=this.t1+t2;
+    if(this.t1>=300&&this.t1<7200&&t2>=300&&t2<14400&&t0>0){
+      const attr=this.t1>=t2?this.tOff:t;
+      this.store(tempBin(tout),isDay(attr)).add(this.cycE/t0);
+    }
+    this.tOff=t; this.offInt=0; this.offKnown=true; this.target=null;
+    this.sigUp=this.sigDown=false; this.ratio=null;
+  }
+  evaluate(run,qmeas){
+    if(run>=14400){ this.sigUp=this.sigDown=false; return; }
+    while(run>=this.taEff) this.taEff+=600;
+    const pred=this.cycE+qmeas*(this.taEff-run);
+    const r=pred/Math.max(this.target,1);
+    this.ratio=r;
+    const hi=1+P.dz/100, lo=1-P.dz/100, hiOff=1+P.dz/200, loOff=1-P.dz/200;
+    if(r>=hi){ this.sigDown=true; this.sigUp=false; }
+    else if(r<=lo){ this.sigUp=true; this.sigDown=false; }
+    else{
+      if(this.sigDown&&r<hiOff) this.sigDown=false;
+      if(this.sigUp&&r>loOff) this.sigUp=false;
+    }
+  }
+}
+
+/* ================= 仿真状态 ================= */
+let S;
+function estimateLoad(){
+  const solarAvg=P.solar*1000*(2/Math.PI)*13/24;
+  const q=(P.ua*(P.tmean-P.tset)+solarAvg+QINT)/DEV.shr;
+  return Math.max(600,q);
+}
+function makeAlgo(){
+  if(P.algo==="C") return new V144(P.pre?estimateLoad():null);
+  return null;
+}
+function algoTes(t,dt,call,tout,qmeas){
+  if(P.algo==="A") return DEV.tesNom;
+  if(P.algo==="B") return P.tesb;
+  return S.algo.update(t,dt,call,tout,qmeas);
+}
+function resetAll(){
+  S={ t:12*3600, tr:P.tset+1.5, tm:P.tset+0.5, qd:0,
+      call:false, thLastSample:-1e9, thLastSwitch:-1e9,
+      algo:makeAlgo(),
+      buf:{t:[],tr:[],tout:[],q:[],tes:[],lo:[],hi:[],call:[]}, nextBuf:0,
+      cycles:[], cur:null, pulldown:null, t0:12*3600,
+      energy:0, cool:0, sq:0, n:0, oob:0 };
+  refreshAll();
+}
+function resetStats(){
+  S.algo=makeAlgo();
+  S.cycles=[]; S.cur=null; S.pulldown=null; S.t0=S.t;
+  S.energy=0; S.cool=0; S.sq=0; S.n=0; S.oob=0;
+}
+
+function stepOnce(){
+  const t=S.t, tout=outdoorTemp(t), qsol=solarGain(t);
+  const dbC=P.db*5/9;
+  // 温控器
+  if(t-S.thLastSample>=60){
+    S.thLastSample=t;
+    if(S.call){ if(S.tr<=P.tset-dbC/2 && t-S.thLastSwitch>=180){S.call=false;S.thLastSwitch=t;} }
+    else{ if(S.tr>=P.tset+dbC/2 && t-S.thLastSwitch>=300){S.call=true;S.thLastSwitch=t;} }
+  }
+  const call=S.call;
+  const qmeas=call?S.qd*(1+P.bias/100):0;
+  const tes=algoTes(t,DT,call,tout,qmeas);
+  // 设备
+  const variable=P.algo!=="A";
+  const qss=call?devCap(tout,tes,variable):0;
+  S.qd+=(qss-S.qd)/DEV.tau*DT;
+  if(!call&&S.qd<1) S.qd=0;
+  const power=call?qss/devCop(tout,tes,variable):0;
+  const qsens=S.qd*DEV.shr;
+  // 房间
+  const gains=qsol+QINT;
+  const dqa=P.ua*(tout-S.tr)+HOUSE_HM*(S.tm-S.tr)+HOUSE_FAIR*gains-qsens;
+  const dqm=HOUSE_HM*(S.tr-S.tm)+(1-HOUSE_FAIR)*gains;
+  S.tr+=dqa/(P.cair*1e6)*DT;
+  S.tm+=dqm/(P.cmass*1e6)*DT;
+  // 循环事件
+  if(call&&!S.prevCall){ S.cur={tOn:t,t2:0,t1:0}; S.cycles.push(S.cur); if(S.cycles.length>400)S.cycles.shift(); }
+  else if(!call&&S.prevCall){ if(S.cur)S.cur.t2=t-S.cur.tOn; if(S.pulldown===null)S.pulldown=t-S.t0; }
+  if(!call&&S.cur&&S.cur.t2>0) S.cur.t1=t-(S.cur.tOn+S.cur.t2);
+  S.prevCall=call;
+  // 指标
+  S.energy+=power*DT/3.6e6; S.cool+=qsens*DT/3.6e6;
+  const err=S.tr-P.tset;
+  S.sq+=err*err; S.n++;
+  if(Math.abs(err)>dbC) S.oob++;
+  // 缓冲（每 60s 一点）
+  if(t>=S.nextBuf){
+    const b=S.buf;
+    b.t.push(t); b.tr.push(S.tr); b.tout.push(tout); b.q.push(qsens/1000);
+    b.tes.push(variable?tes:DEV.tesNom); b.lo.push(P.tset-dbC/2); b.hi.push(P.tset+dbC/2); b.call.push(call?1:0);
+    if(b.t.length>20160){ for(const k in b) b[k].splice(0,1440); }
+    S.nextBuf=t+60;
+  }
+  S.t+=DT;
+}
+
+/* ================= 图表 ================= */
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let winLen=86400;
+function setupCanvas(cv){
+  const r=cv.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  if(cv.width!==Math.round(r.width*dpr)){ cv.width=Math.round(r.width*dpr); cv.height=Math.round(parseInt(cv.getAttribute("height"))*dpr); }
+  const ctx=cv.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w:r.width,h:parseInt(cv.getAttribute("height"))};
+}
+function niceTicks(lo,hi,n){
+  const span=hi-lo||1, step0=span/n, mag=Math.pow(10,Math.floor(Math.log10(step0)));
+  let step=mag; for(const m of [1,2,2.5,5,10]) if(step0<=m*mag){step=m*mag;break;}
+  const t0=Math.ceil(lo/step)*step, out=[];
+  for(let v=t0;v<=hi+1e-9;v+=step) out.push(v);
+  return out;
+}
+function fmtClock(t){
+  const d=Math.floor(t/DAY)+1, h=Math.floor((t%DAY)/3600), m=Math.floor((t%3600)/60);
+  return "第"+d+"天 "+String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
+}
+function windowRange(){
+  const b=S.buf; if(!b.t.length) return [0,1,0,0];
+  const tEnd=b.t[b.t.length-1];
+  const tStart=winLen===0?b.t[0]:Math.max(b.t[0],tEnd-winLen);
+  let i0=0;
+  // 二分找起点
+  let lo=0,hi=b.t.length-1;
+  while(lo<hi){const mid=(lo+hi)>>1; if(b.t[mid]<tStart)lo=mid+1;else hi=mid;}
+  i0=lo;
+  return [tStart,Math.max(tEnd,tStart+600),i0,b.t.length-1];
+}
+const PADL=44,PADR=10,PADT=8,PADB=20;
+function drawFrame(ctx,w,h,t0,t1,ylo,yhi,yfmt){
+  ctx.clearRect(0,0,w,h);
+  ctx.font="10px system-ui"; ctx.fillStyle=css("--muted");
+  ctx.strokeStyle=css("--grid"); ctx.lineWidth=1;
+  const X=t=>PADL+(t-t0)/(t1-t0)*(w-PADL-PADR);
+  const Y=v=>h-PADB-(v-ylo)/(yhi-ylo)*(h-PADT-PADB);
+  for(const v of niceTicks(ylo,yhi,4)){
+    const y=Y(v);
+    ctx.beginPath();ctx.moveTo(PADL,y);ctx.lineTo(w-PADR,y);ctx.stroke();
+    ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(yfmt(v),PADL-5,y);
+  }
+  const span=t1-t0;
+  const tick=span<=6*3600?3600:span<=DAY?4*3600:span<=3*DAY?12*3600:DAY;
+  ctx.textAlign="center";ctx.textBaseline="top";
+  for(let tt=Math.ceil(t0/tick)*tick;tt<=t1;tt+=tick){
+    const x=X(tt);
+    ctx.beginPath();ctx.moveTo(x,h-PADB);ctx.lineTo(x,h-PADB+3);ctx.strokeStyle=css("--axis");ctx.stroke();ctx.strokeStyle=css("--grid");
+    const lab=tick>=DAY?("第"+(Math.floor(tt/DAY)+1)+"天"):(Math.floor((tt%DAY)/3600)+":00");
+    ctx.fillText(lab,x,h-PADB+5);
+  }
+  ctx.strokeStyle=css("--axis");
+  ctx.beginPath();ctx.moveTo(PADL,h-PADB);ctx.lineTo(w-PADR,h-PADB);ctx.stroke();
+  return {X,Y};
+}
+function drawLine(ctx,b,key,X,Y,i0,i1,color,width){
+  ctx.strokeStyle=color;ctx.lineWidth=width||2;ctx.beginPath();
+  const step=Math.max(1,Math.floor((i1-i0)/1200));
+  let first=true;
+  for(let i=i0;i<=i1;i+=step){
+    const x=X(b.t[i]),y=Y(b[key][i]);
+    if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+}
+function drawBand(ctx,b,X,Y,i0,i1,loKey,hiKey,fill){
+  ctx.fillStyle=fill;ctx.beginPath();
+  const step=Math.max(1,Math.floor((i1-i0)/1200));
+  let first=true;
+  for(let i=i0;i<=i1;i+=step){const x=X(b.t[i]),y=Y(b[hiKey][i]); if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);}
+  for(let i=i1;i>=i0;i-=step){ctx.lineTo(X(b.t[i]),Y(b[loKey][i]));}
+  ctx.closePath();ctx.fill();
+}
+function drawCallBand(ctx,b,X,i0,i1,h){
+  ctx.fillStyle=css("--callband");
+  let start=null;
+  for(let i=i0;i<=i1;i++){
+    if(b.call[i]&&start===null)start=b.t[i];
+    if((!b.call[i]||i===i1)&&start!==null){
+      ctx.fillRect(X(start),PADT,Math.max(1,X(b.t[i])-X(start)),h-PADT-PADB);
+      start=null;
+    }
+  }
+}
+function yBounds(b,keys,i0,i1,pad){
+  let lo=Infinity,hi=-Infinity;
+  for(const k of keys)for(let i=i0;i<=i1;i++){const v=b[k][i];if(v<lo)lo=v;if(v>hi)hi=v;}
+  if(!isFinite(lo)){lo=0;hi=1;}
+  const p=(hi-lo)*pad||1;
+  return [lo-p,hi+p];
+}
+
+function renderCharts(){
+  const b=S.buf; if(b.t.length<2){return;}
+  const [t0,t1,i0,i1]=windowRange();
+  { // 温度
+    const {ctx,w,h}=setupCanvas(document.getElementById("chTemp"));
+    const [ylo,yhi]=yBounds(b,["tr","tout","lo","hi"],i0,i1,0.08);
+    const {X,Y}=drawFrame(ctx,w,h,t0,t1,ylo,yhi,v=>v.toFixed(0)+"°");
+    drawBand(ctx,b,X,Y,i0,i1,"lo","hi",css("--band"));
+    drawLine(ctx,b,"tout",X,Y,i0,i1,css("--s-out"),1.6);
+    drawLine(ctx,b,"tr",X,Y,i0,i1,css("--s-room"),2);
+  }
+  { // 能力
+    const {ctx,w,h}=setupCanvas(document.getElementById("chCap"));
+    const [,yhi]=yBounds(b,["q"],i0,i1,0.15);
+    const {X,Y}=drawFrame(ctx,w,h,t0,t1,0,Math.max(yhi,1),v=>v.toFixed(0));
+    drawCallBand(ctx,b,X,i0,i1,h);
+    ctx.fillStyle=css("--s-cap")+"33";
+    ctx.beginPath();
+    const step=Math.max(1,Math.floor((i1-i0)/1200));
+    ctx.moveTo(X(b.t[i0]),Y(0));
+    for(let i=i0;i<=i1;i+=step)ctx.lineTo(X(b.t[i]),Y(b.q[i]));
+    ctx.lineTo(X(b.t[i1]),Y(0));ctx.closePath();ctx.fill();
+    drawLine(ctx,b,"q",X,Y,i0,i1,css("--s-cap"),1.6);
+  }
+  { // Tes
+    const {ctx,w,h}=setupCanvas(document.getElementById("chTes"));
+    const {X,Y}=drawFrame(ctx,w,h,t0,t1,3.5,14.5,v=>v.toFixed(0)+"°");
+    drawLine(ctx,b,"tes",X,Y,i0,i1,css("--s-tes"),2);
+  }
+  renderCycles();
+}
+function renderCycles(){
+  const {ctx,w,h}=setupCanvas(document.getElementById("chCyc"));
+  const cs=S.cycles.filter(c=>c.t2>0).slice(-30);
+  ctx.clearRect(0,0,w,h);
+  if(!cs.length)return;
+  let ymax=5;
+  for(const c of cs) ymax=Math.max(ymax,c.t2/60,c.t1/60);
+  const Y=v=>h-PADB-(v/(ymax*1.12))*(h-PADT-PADB);
+  ctx.font="10px system-ui";ctx.fillStyle=css("--muted");
+  ctx.strokeStyle=css("--grid");
+  for(const v of niceTicks(0,ymax*1.05,3)){
+    const y=Y(v);ctx.beginPath();ctx.moveTo(PADL,y);ctx.lineTo(w-PADR,y);ctx.stroke();
+    ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(v.toFixed(0),PADL-5,y);
+  }
+  const gw=(w-PADL-PADR)/cs.length, bw=Math.max(2,(gw-6)/2);
+  cs.forEach((c,i)=>{
+    const x=PADL+i*gw+3;
+    ctx.fillStyle=css("--s-room");
+    ctx.fillRect(x,Y(c.t2/60),bw,Y(0)-Y(c.t2/60));
+    ctx.fillStyle=css("--muted");
+    ctx.fillRect(x+bw+2,Y(c.t1/60),bw,Y(0)-Y(c.t1/60));
+  });
+  ctx.strokeStyle=css("--axis");ctx.beginPath();ctx.moveTo(PADL,Y(0));ctx.lineTo(w-PADR,Y(0));ctx.stroke();
+  S._cycGeom={cs,gw,Y};
+}
+
+/* ================= 悬浮读数 ================= */
+function bindHover(cvId,ttId,rows){
+  const cv=document.getElementById(cvId), tt=document.getElementById(ttId);
+  cv.addEventListener("mousemove",e=>{
+    const b=S.buf; if(b.t.length<2){tt.style.display="none";return;}
+    const r=cv.getBoundingClientRect();
+    const [t0,t1,i0,i1]=windowRange();
+    const frac=(e.clientX-r.left-PADL)/(r.width-PADL-PADR);
+    if(frac<0||frac>1){tt.style.display="none";return;}
+    const tq=t0+frac*(t1-t0);
+    let lo=i0,hi=i1;
+    while(lo<hi){const m=(lo+hi)>>1; if(b.t[m]<tq)lo=m+1;else hi=m;}
+    const i=lo;
+    tt.innerHTML='<div class="tt-t">'+fmtClock(b.t[i])+'</div>'+
+      rows.map(([lab,fn])=>'<div class="row"><span>'+lab+'</span><b>'+fn(i)+'</b></div>').join("");
+    tt.style.display="block";
+    const x=Math.min(e.clientX-r.left+14,r.width-150), y=e.clientY-r.top-10;
+    tt.style.left=x+"px"; tt.style.top=Math.max(0,y)+"px";
+  });
+  cv.addEventListener("mouseleave",()=>tt.style.display="none");
+}
+bindHover("chTemp","ttTemp",[
+  ["室温",i=>S.buf.tr[i].toFixed(2)+" ℃"],
+  ["室外",i=>S.buf.tout[i].toFixed(1)+" ℃"],
+  ["设定带",i=>S.buf.lo[i].toFixed(2)+"~"+S.buf.hi[i].toFixed(2)+" ℃"],
+]);
+bindHover("chCap","ttCap",[
+  ["显热能力",i=>S.buf.q[i].toFixed(2)+" kW"],
+  ["thermo",i=>S.buf.call[i]?"ON":"OFF"],
+]);
+bindHover("chTes","ttTes",[["Tes",i=>S.buf.tes[i].toFixed(2)+" ℃"]]);
+document.getElementById("chCyc").addEventListener("mousemove",e=>{
+  const tt=document.getElementById("ttCyc"), g=S._cycGeom;
+  if(!g){tt.style.display="none";return;}
+  const r=e.currentTarget.getBoundingClientRect();
+  const i=Math.floor((e.clientX-r.left-PADL)/g.gw);
+  if(i<0||i>=g.cs.length){tt.style.display="none";return;}
+  const c=g.cs[i];
+  tt.innerHTML='<div class="tt-t">'+fmtClock(c.tOn)+' 起</div>'+
+    '<div class="row"><span>运转 t2</span><b>'+(c.t2/60).toFixed(1)+' min</b></div>'+
+    '<div class="row"><span>停机 t1</span><b>'+(c.t1/60).toFixed(1)+' min</b></div>';
+  tt.style.display="block";
+  tt.style.left=Math.min(e.clientX-r.left+14,r.width-140)+"px";
+  tt.style.top=(e.clientY-r.top-10)+"px";
+});
+document.getElementById("chCyc").addEventListener("mouseleave",()=>document.getElementById("ttCyc").style.display="none");
+
+/* ================= KPI 与内部状态 ================= */
+const KPI_DEFS=[
+  ["初始达温","pd","min"],["平均运转 t2","t2","min"],["平均停机 t1","t1","min"],
+  ["循环次数","cyc","/天"],["耗电","kwh","kWh/天"],["显热 COP","cop",""],
+  ["室温 RMSE","rmse","℃"],["出带时间","oob","%"],
+];
+const kpiBox=document.getElementById("kpis");
+kpiBox.innerHTML=KPI_DEFS.map(d=>'<div class="kpi"><div class="k">'+d[0]+'</div><div class="v"><span id="kpi_'+d[1]+'">—</span><span class="u">'+d[2]+'</span></div></div>').join("");
+function setK(id,v){document.getElementById("kpi_"+id).textContent=v;}
+function renderKpis(){
+  const days=Math.max((S.t-S.t0)/DAY,1e-6);
+  const done=S.cycles.filter(c=>c.t2>0), off=S.cycles.filter(c=>c.t1>0);
+  const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
+  setK("pd",S.pulldown===null?"—":(S.pulldown/60).toFixed(0));
+  setK("t2",done.length?(mean(done.map(c=>c.t2))/60).toFixed(1):"—");
+  setK("t1",off.length?(mean(off.map(c=>c.t1))/60).toFixed(1):"—");
+  setK("cyc",(S.cycles.length/days).toFixed(1));
+  setK("kwh",(S.energy/days).toFixed(1));
+  setK("cop",S.energy>0?(S.cool/S.energy).toFixed(2):"—");
+  setK("rmse",S.n?Math.sqrt(S.sq/S.n).toFixed(2):"—");
+  setK("oob",S.n?(S.oob/S.n*100).toFixed(1):"—");
+}
+function renderAlgoPanel(){
+  const panel=document.getElementById("algoPanel");
+  const isC=P.algo==="C";
+  panel.style.opacity=isC?1:0.45;
+  const pill=document.getElementById("sigPill");
+  const a=S.algo;
+  if(!isC||!a){ pill.textContent="算法 "+P.algo; pill.className="state-pill";
+    document.getElementById("ratioTxt").textContent="—";
+    document.getElementById("ratioFill").style.width="0%";
+    document.getElementById("cycNow").textContent="V1.44 内部状态仅在算法 C 下有效。";
+    document.getElementById("binTable").innerHTML=""; return; }
+  if(a.sigUp){pill.textContent="能力 UP";pill.className="state-pill up";}
+  else if(a.sigDown){pill.textContent="能力 DOWN";pill.className="state-pill down";}
+  else {pill.textContent="信号 —";pill.className="state-pill";}
+  const r=a.ratio;
+  document.getElementById("ratioTxt").textContent=r===null?"—":(r*100).toFixed(0)+"%";
+  document.getElementById("ratioFill").style.width=r===null?"0%":Math.min(100,r*50)+"%";
+  let now;
+  if(S.call){ now="运转中 "+((S.t-a.tOn)/60).toFixed(0)+" min · 当前 Tes "+a.tes.toFixed(1)+"℃ · 目标总负荷 "
+      +(a.target===null?"未学成（不发信号）":(a.target/3.6e6).toFixed(2)+" kWh"); }
+  else{ now="停机中 "+((S.t-a.tOff)/60).toFixed(0)+" min（t1 计时）"; }
+  document.getElementById("cycNow").textContent=now;
+  const rows=[];
+  for(let bin=1;bin<=16;bin++){
+    const d=a.bins.get(bin+"-d"),n=a.bins.get(bin+"-n");
+    const tes=a.tesStore.get(bin);
+    if(!d&&!n&&tes===undefined) continue;
+    const cell=s=>s? (s.coeff===null?("采样"+s.samples.length+"/7"):"<b>"+(s.coeff/1000).toFixed(2)+"</b>") : "—";
+    rows.push("<tr><td>"+binRange(bin)+"℃</td><td>"+cell(d)+"</td><td>"+cell(n)+"</td><td>"+(tes===undefined?"—":"<b>"+tes.toFixed(1)+"</b>")+"</td></tr>");
+  }
+  document.getElementById("binTable").innerHTML=
+    "<tr><th>区间</th><th>昼 q kW</th><th>夜 q kW</th><th>Tes ℃</th></tr>"+
+    (rows.length?rows.join(""):"<tr><td colspan=4 style='text-align:center;color:var(--muted)'>尚无学习数据</td></tr>");
+}
+
+/* ================= UI 绑定 ================= */
+const SLIDERS=[
+  ["p_tmean","v_tmean","tmean",1],["p_tamp","v_tamp","tamp",1],["p_solar","v_solar","solar",1],
+  ["p_ua","v_ua","ua",0],["p_cair","v_cair","cair",1],["p_cmass","v_cmass","cmass",0],
+  ["p_tset","v_tset","tset",1],["p_db","v_db","db",2],
+  ["p_qr","v_qr","qr",2],["p_cop","v_cop","cop",2],["p_bias","v_bias","bias",0],
+  ["p_tesb","v_tesb","tesb",1],
+  ["p_ta","v_ta","ta",0],["p_dz","v_dz","dz",0],["p_rate","v_rate","rate",2],["p_cyc","v_cyc","cyc",1],
+];
+function refreshSliders(){
+  for(const [pid,vid,key,dec] of SLIDERS){
+    const el=document.getElementById(pid);
+    el.value=P[key];
+    document.getElementById(vid).textContent=(+P[key]).toFixed(dec);
+  }
+  document.getElementById("p_pre").checked=P.pre;
+  document.querySelectorAll("#algoSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.a===P.algo));
+  document.getElementById("algoB").style.display=P.algo==="B"?"":"none";
+  document.getElementById("algoC").style.display=P.algo==="C"?"":"none";
+}
+for(const [pid,vid,key,dec] of SLIDERS){
+  document.getElementById(pid).addEventListener("input",e=>{
+    P[key]=+e.target.value;
+    document.getElementById(vid).textContent=(+P[key]).toFixed(dec);
+  });
+}
+document.getElementById("p_pre").addEventListener("change",e=>{P.pre=e.target.checked; resetStats(); refreshAll();});
+document.getElementById("algoSel").addEventListener("click",e=>{
+  const a=e.target.dataset.a; if(!a)return;
+  P.algo=a; resetStats(); refreshSliders(); refreshAll();
+});
+document.getElementById("winSel").addEventListener("click",e=>{
+  const w=e.target.dataset.w; if(w===undefined)return;
+  winLen=+w;
+  document.querySelectorAll("#winSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.w===w));
+});
+const PRESETS={
+  s1:{tmean:35,tamp:0,solar:2,tset:24.5,algo:"C",pre:true},
+  s2:{tmean:30,tamp:5,solar:2.5,tset:24.5,algo:"C",pre:false},
+  s3:{tmean:24,tamp:4,solar:1.8,tset:23,algo:"C",pre:false},
+  s4:{tmean:32,tamp:4,solar:2.5,tset:25.5,algo:"C",pre:true},
+};
+document.getElementById("presets").addEventListener("click",e=>{
+  const p=e.target.dataset.p; if(!p)return;
+  Object.assign(P,PRESETS[p]);
+  document.querySelectorAll("#presets .chip").forEach(c=>c.classList.toggle("on",c.dataset.p===p));
+  refreshSliders(); resetAll();
+});
+let running=true;
+document.getElementById("playBtn").addEventListener("click",()=>{
+  running=!running;
+  document.getElementById("playBtn").textContent=running?"暂停":"继续";
+});
+document.getElementById("resetBtn").addEventListener("click",resetAll);
+
+/* ================= 主循环 ================= */
+function refreshAll(){ renderKpis(); renderAlgoPanel(); renderCharts(); }
+let lastReal=performance.now(), carry=0, lastUi=0;
+function frame(now){
+  const dtReal=Math.min(0.25,(now-lastReal)/1000); lastReal=now;
+  if(running){
+    const speed=+document.getElementById("speed").value;
+    carry+=dtReal*speed/DT;
+    let steps=Math.min(6000,Math.floor(carry));
+    carry-=steps;
+    while(steps-->0) stepOnce();
+  }
+  document.getElementById("clock").textContent=fmtClock(S.t);
+  if(now-lastUi>120){ lastUi=now; refreshAll(); }
+  requestAnimationFrame(frame);
+}
+Object.assign(P,PRESETS.s2);
+refreshSliders();
+resetAll();
+requestAnimationFrame(frame);
+window.addEventListener("resize",renderCharts);
+</script>
