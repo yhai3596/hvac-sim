@@ -109,6 +109,29 @@ table.records th:first-child,table.records td:first-child{text-align:left}
 table.bins td,table.records td{text-align:right;padding:3px 6px;border-bottom:1px solid var(--grid);color:var(--ink2);white-space:nowrap}
 table.bins td b,table.records td b{color:var(--ink);font-weight:600}
 .note{color:var(--muted);font-size:12px;line-height:1.6}
+table.defs{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0}
+table.defs th{color:var(--muted);font-weight:500;text-align:left;padding:4px 8px;border-bottom:1px solid var(--grid);white-space:nowrap}
+table.defs td{padding:4px 8px;border-bottom:1px solid var(--grid);color:var(--ink2);vertical-align:top}
+table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
+.cfgrow{display:grid;grid-template-columns:auto 1.1fr .8fr 1.6fr 1.1fr 1.4fr auto auto;gap:6px;align-items:center;margin:5px 0}
+.cfgrow input[type=text],.cfgrow input[type=password],.cfgrow select{
+  border:1px solid var(--ring);background:var(--surface);border-radius:6px;padding:4px 7px;font-size:12px;min-width:0;width:100%}
+.cfgrow .tstat{font-size:11px;min-width:7em}
+.cfg-head{font-size:11px;color:var(--muted);display:grid;grid-template-columns:auto 1.1fr .8fr 1.6fr 1.1fr 1.4fr auto auto;gap:6px;margin-top:8px}
+@media (max-width:900px){.cfgrow,.cfg-head{grid-template-columns:auto 1fr 1fr;grid-auto-rows:auto}}
+.mdout{font-size:13.5px;line-height:1.7;max-width:75em}
+.mdout h1{font-size:17px;margin:14px 0 6px}
+.mdout h2{font-size:15px;margin:14px 0 6px}
+.mdout h3{font-size:13.5px;margin:12px 0 4px}
+.mdout ul,.mdout ol{margin:4px 0;padding-left:22px}
+.mdout li{margin:2px 0}
+.mdout p{margin:6px 0}
+.mdout code{background:var(--chip);border-radius:4px;padding:0 4px;font-size:12px}
+.mdout table{border-collapse:collapse;margin:8px 0;font-size:12.5px;font-variant-numeric:tabular-nums}
+.mdout th,.mdout td{border:1px solid var(--grid);padding:3px 8px;text-align:left}
+.mdout th{color:var(--muted);font-weight:600}
+.llm-status{font-size:12.5px;color:var(--ink2);margin:6px 0}
+.llm-status.err{color:var(--bad)}
 .delta-good{color:var(--good);font-weight:600}
 .delta-bad{color:var(--bad);font-weight:600}
 .records-wrap{overflow-x:auto}
@@ -374,11 +397,43 @@ table.bins td b,table.records td b{color:var(--ink);font-weight:600}
     <div class="rec-actions">
       <button class="btn small primary" id="recBtn">记录当前运行为方案</button>
       <button class="btn small" id="csvBtn">复制 CSV</button>
+      <button class="btn small" id="defsBtn">指标说明</button>
       <button class="btn small" id="clearRecBtn">清空记录</button>
       <span class="note" id="recHint"></span>
     </div>
+    <div id="defsPanel" hidden><table class="defs" id="defsTable"></table></div>
     <div class="records-wrap"><table class="records" id="recTable"></table></div>
     <textarea id="csvBox" hidden readonly aria-label="CSV 内容"></textarea>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>LLM 方案分析报告</b>
+      <span class="note">基于上方方案记录生成对比分析；API Key 仅保存在本机浏览器</span>
+    </div>
+    <div class="rec-actions">
+      <button class="btn small primary" id="genBtn">生成分析报告</button>
+      <button class="btn small" id="promptBtn">复制分析提示词</button>
+      <button class="btn small" id="cfgBtn">API 配置</button>
+      <button class="btn small" id="copyRepBtn" hidden>复制报告</button>
+    </div>
+    <div class="llm-status" id="llmStatus">未配置 API 时可用「复制分析提示词」把数据粘贴到任意大模型对话中分析。</div>
+    <div id="cfgPanel" hidden>
+      <div class="rec-actions" id="presetRow">
+        <span class="note">添加预置：</span>
+        <button class="btn small" data-p="claude">+ Claude</button>
+        <button class="btn small" data-p="openai">+ OpenAI</button>
+        <button class="btn small" data-p="deepseek">+ DeepSeek</button>
+        <button class="btn small" data-p="glm">+ 智谱 GLM</button>
+        <button class="btn small" data-p="kimi">+ Kimi</button>
+        <button class="btn small" data-p="minimax">+ MiniMax</button>
+      </div>
+      <div class="cfg-head"><span>启用</span><span>名称</span><span>协议</span><span>Base URL</span><span>模型</span><span>API Key</span><span></span><span></span></div>
+      <div id="cfgRows"></div>
+      <p class="hint">多条启用的配置按轮询顺序调用，失败自动切换下一条。模型名以各家最新文档为准，可直接修改；Base 可填完整
+        chat/completions 地址（MiniMax 的 chatcompletion_v2 亦可）。注意：Artifact 预览环境会拦截外部网络请求，
+        外部 API 需在本地打开 web/index.html 或自行部署后使用。Key 仅存于本机浏览器 localStorage。</p>
+    </div>
+    <div class="mdout" id="repOut"></div>
   </div>
 </main>
 </div>
@@ -1157,6 +1212,230 @@ document.getElementById("csvBtn").addEventListener("click",()=>{
       ()=>document.getElementById("recHint").textContent="CSV 已复制到剪贴板（下方可手动全选复制）",
       ()=>document.getElementById("recHint").textContent="请在下方文本框手动全选复制");
   else document.getElementById("recHint").textContent="请在下方文本框手动全选复制";
+});
+
+/* ================= 指标说明 ================= */
+const METRIC_DEFS={
+  t2:["达温 t2","单次运转时长：thermo-on（温控器请求制冷/制热）到 thermo-off（达温停机）的时间，取均值。反映每次达温需要多久","min","并非越短越好：过短=频繁启停，过长=拉不住温度"],
+  t1:["停机 t1","达温停机到下一次启动之间的停机时长，取均值","min","越长说明一次运转的\"续航\"越久、启停越少"],
+  period:["达温间隔","完整循环周期 = t2 + t1，取均值。即相邻两次达温之间的时间","min","越长循环越少；V1.44 的 TA 目标就是拉长它"],
+  hz95:["压缩机到峰值","压缩机从启动到达到本循环最高频率的 95% 所需时间，取均值。反映出力爬升速度","min","越短出力越快，达温越有保障"],
+  cyc:["循环/天","每天压缩机启停循环次数","次/天","越少启停损耗与磨损越小；但过少常伴随温度波动增大"],
+  kwh:["kWh/天","日均总耗电：压缩机 + 内机风机 + 电辅热（制热）","kWh","越低越省电"],
+  rmse:["RMSE℃","室温对设定温度的均方根偏差","℃","越小温度越稳、舒适性越好"],
+  oob:["出带%","室温超出\"设定值 ± 回差\"范围之外的时间占比","%","越小越好；达温慢/能力不足时会明显升高"],
+  rh:["RH%","室内相对湿度均值（制冷模式）","%","住宅舒适区间约 40~60%"],
+  rh60:["RH>60%","室内相对湿度超过 60% 舒适上限的时间占比","%","越小除湿效果越好——除湿不足投诉的直接量化"],
+  dehum:["除湿L/天","日均净除湿量：盘管凝水实际排走量（除湿量 − 停机再蒸发回房间的部分）","L/天","湿区（佛州/德州）越大越好"],
+  auxk:["辅热kWh","日均电辅热耗电（制热模式）","kWh/天","越少说明热泵本体承担越多，越省电"],
+  defr:["化霜/天","日均化霜次数（制热模式，化霜期间制热能力为 0）","次/天","越少越好"],
+};
+function renderDefs(){
+  document.getElementById("defsTable").innerHTML=
+    "<tr><th>指标</th><th>定义</th><th>单位</th><th>解读</th></tr>"+
+    REC_COLS.map(c=>{const d=METRIC_DEFS[c[1]];
+      return "<tr><td>"+d[0]+"</td><td>"+d[1]+"</td><td>"+d[2]+"</td><td>"+d[3]+"</td></tr>";}).join("");
+}
+document.getElementById("defsBtn").addEventListener("click",()=>{
+  const p=document.getElementById("defsPanel");
+  p.hidden=!p.hidden;
+  if(!p.hidden)renderDefs();
+});
+
+/* ================= LLM 分析报告 ================= */
+const LLM_PRESETS={
+  claude:{name:"Claude（Anthropic）",protocol:"anthropic",base:"https://api.anthropic.com",model:"claude-opus-5"},
+  openai:{name:"OpenAI",protocol:"openai",base:"https://api.openai.com/v1",model:"gpt-4o-mini"},
+  deepseek:{name:"DeepSeek",protocol:"openai",base:"https://api.deepseek.com",model:"deepseek-chat"},
+  glm:{name:"智谱 GLM",protocol:"openai",base:"https://open.bigmodel.cn/api/paas/v4",model:"glm-4.6"},
+  kimi:{name:"Kimi（月之暗面）",protocol:"openai",base:"https://api.moonshot.cn/v1",model:"kimi-k2-turbo-preview"},
+  minimax:{name:"MiniMax",protocol:"openai",base:"https://api.minimaxi.com/v1",model:"MiniMax-M2"},
+};
+let llmCfgs=[],llmPtr=0;
+try{llmCfgs=JSON.parse(localStorage.getItem("acLlmCfgs")||"[]");
+    llmPtr=+localStorage.getItem("acLlmPtr")||0;}catch(e){}
+function saveLlm(){try{localStorage.setItem("acLlmCfgs",JSON.stringify(llmCfgs));
+  localStorage.setItem("acLlmPtr",String(llmPtr));}catch(e){}}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function renderCfgs(){
+  document.getElementById("cfgRows").innerHTML=llmCfgs.map((c,i)=>
+    '<div class="cfgrow" data-i="'+i+'">'+
+    '<input type="checkbox" data-f="on"'+(c.on?" checked":"")+' aria-label="启用">'+
+    '<input type="text" data-f="name" value="'+esc(c.name)+'">'+
+    '<select data-f="protocol"><option value="openai"'+(c.protocol==="openai"?" selected":"")+'>OpenAI 协议</option>'+
+      '<option value="anthropic"'+(c.protocol==="anthropic"?" selected":"")+'>Anthropic 协议</option></select>'+
+    '<input type="text" data-f="base" value="'+esc(c.base)+'" spellcheck="false">'+
+    '<input type="text" data-f="model" value="'+esc(c.model)+'" spellcheck="false">'+
+    '<input type="password" data-f="key" value="'+esc(c.key||"")+'" placeholder="sk-..." autocomplete="off">'+
+    '<button class="btn small" data-act="test">测试</button>'+
+    '<button class="btn small" data-act="del">删</button>'+
+    '<span class="tstat" style="grid-column:1/-1">'+(c.tstat||"")+'</span></div>').join("")
+    ||'<p class="note">尚无配置。点击上方预置按钮添加，填入 API Key 后「测试」。</p>';
+}
+document.getElementById("cfgBtn").addEventListener("click",()=>{
+  const p=document.getElementById("cfgPanel");
+  p.hidden=!p.hidden;
+  if(!p.hidden)renderCfgs();
+});
+document.getElementById("presetRow").addEventListener("click",e=>{
+  const k=e.target.dataset.p;if(!k)return;
+  llmCfgs.push({...LLM_PRESETS[k],on:true,key:"",tstat:""});
+  saveLlm();renderCfgs();
+});
+document.getElementById("cfgRows").addEventListener("input",e=>{
+  const row=e.target.closest(".cfgrow");if(!row)return;
+  const c=llmCfgs[+row.dataset.i],f=e.target.dataset.f;
+  if(!c||!f)return;
+  c[f]=e.target.type==="checkbox"?e.target.checked:e.target.value;
+  saveLlm();
+});
+document.getElementById("cfgRows").addEventListener("click",async e=>{
+  const act=e.target.dataset.act;if(!act)return;
+  const row=e.target.closest(".cfgrow"),i=+row.dataset.i,c=llmCfgs[i];
+  if(act==="del"){llmCfgs.splice(i,1);saveLlm();renderCfgs();return;}
+  if(act==="test"){
+    c.tstat="测试中…";renderCfgs();
+    const t0=performance.now();
+    try{
+      const txt=await llmCall(c,"你是连通性测试助手。","请只回复两个字符：OK",16);
+      c.tstat="✓ 连通（"+((performance.now()-t0)/1000).toFixed(1)+"s）："+txt.slice(0,40);
+    }catch(err){c.tstat="✗ "+describeErr(err);}
+    saveLlm();renderCfgs();
+  }
+});
+function describeErr(err){
+  if(err instanceof TypeError&&/fetch/i.test(err.message))
+    return "网络请求被阻止（Artifact 预览环境禁止外部 API；请在本地打开 web/index.html 或部署后使用），或目标不支持浏览器跨域";
+  return err.message;
+}
+async function llmParse(r){
+  const t=await r.text();
+  let j=null;try{j=JSON.parse(t);}catch(e){}
+  if(!r.ok){
+    const msg=j&&j.error&&(j.error.message||j.error.type);
+    throw new Error("HTTP "+r.status+(msg?"："+msg:t?"："+t.slice(0,160):""));
+  }
+  if(!j)throw new Error("响应不是 JSON");
+  return j;
+}
+async function llmCall(cfg,sys,user,maxTok){
+  if(!cfg.key)throw new Error("未填 API Key");
+  const base=(cfg.base||"").replace(/\/+$/,"");
+  if(cfg.protocol==="anthropic"){
+    const r=await fetch(base+"/v1/messages",{method:"POST",headers:{
+      "content-type":"application/json","x-api-key":cfg.key,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:cfg.model,max_tokens:maxTok,system:sys,
+        messages:[{role:"user",content:user}]})});
+    const j=await llmParse(r);
+    const txt=(j.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+    if(!txt)throw new Error(j.stop_reason==="refusal"?"模型拒绝了该请求":"空响应");
+    return txt;
+  }
+  const ep=/chat\/completions|chatcompletion/.test(base)?base:base+"/chat/completions";
+  const r=await fetch(ep,{method:"POST",headers:{"content-type":"application/json",
+    "authorization":"Bearer "+cfg.key},
+    body:JSON.stringify({model:cfg.model,max_tokens:maxTok,
+      messages:[{role:"system",content:sys},{role:"user",content:user}]})});
+  const j=await llmParse(r);
+  const txt=j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;
+  if(!txt)throw new Error("空响应（"+JSON.stringify(j).slice(0,120)+"）");
+  return txt;
+}
+function buildPrompt(){
+  const defs=REC_COLS.map(c=>{const d=METRIC_DEFS[c[1]];
+    return "- "+d[0]+"（"+d[2]+"）："+d[1]+"。"+d[3];}).join("\n");
+  const sys="你是暖通空调（HVAC）变频控制算法仿真分析专家。背景：面向北美替代市场的一拖一变频空调，"+
+    "内外机无通讯，外机只能通过温控器 thermo-on/off 时序与自测冷媒能力做能需判断；被评估的 V1.44 算法"+
+    "通过负荷自学习调整目标蒸发/冷凝温度（Tes/Tcs）以拉长运转循环省电。仿真平台为 2R2C 房间模型 + 湿平衡 + "+
+    "显式压缩机频率 + ADP/旁通因子除湿模型，结论适用于方案间相对比较。已知两项客户反馈：达温慢、除湿不足。\n"+
+    "指标定义：\n"+defs;
+  const base=records.find(r=>r.baseline)||records[0];
+  const lines=records.map(r=>{
+    const ms=REC_COLS.map(c=>{const v=r.m[c[1]];
+      return METRIC_DEFS[c[1]][0]+"="+(v===null||v===undefined?"—":(+v).toFixed(c[2]));}).join("，");
+    return "【"+r.name+(r.baseline?"（基准）":"")+"】配置："+r.desc+"\n  指标："+ms;
+  }).join("\n");
+  const user="以下是 "+records.length+" 个仿真方案的运行记录（基准为 "+(base?base.name:"无")+"）：\n\n"+lines+
+    "\n\n请输出中文 Markdown 分析报告，包含：\n"+
+    "1. 执行摘要（3~5 句，先给结论）\n"+
+    "2. 各方案相对基准的关键差异与机理解释（结合变频空调控制原理，解释为什么会这样）\n"+
+    "3. 节能–达温（舒适）–除湿 三角权衡分析\n"+
+    "4. 推荐方案与参数调整建议（明确指出推荐哪个方案或哪组参数方向）\n"+
+    "5. 下一步值得补充的仿真实验建议\n"+
+    "要求：用数据说话，引用具体指标值与差异百分比；指出任何反直觉或需要警惕的结果。";
+  return {sys,user};
+}
+function mdRender(md){
+  const lines=md.split("\n");let html="",inUl=false,inOl=false,inTable=false;
+  const close=()=>{if(inUl){html+="</ul>";inUl=false;}if(inOl){html+="</ol>";inOl=false;}
+    if(inTable){html+="</table>";inTable=false;}};
+  const inline=s=>esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/`([^`]+)`/g,"<code>$1</code>");
+  for(const raw of lines){
+    const l=raw.trimEnd();
+    let m;
+    if((m=l.match(/^(#{1,3})\s+(.*)/))){close();html+="<h"+m[1].length+">"+inline(m[2])+"</h"+m[1].length+">";}
+    else if(/^\s*[-*]\s+/.test(l)){if(!inUl){close();html+="<ul>";inUl=true;}
+      html+="<li>"+inline(l.replace(/^\s*[-*]\s+/,""))+"</li>";}
+    else if(/^\s*\d+[.、]\s+/.test(l)){if(!inOl){close();html+="<ol>";inOl=true;}
+      html+="<li>"+inline(l.replace(/^\s*\d+[.、]\s+/,""))+"</li>";}
+    else if(/^\|.*\|$/.test(l)){
+      if(/^\|[\s:|-]+\|$/.test(l))continue;
+      if(!inTable){close();html+="<table>";inTable=true;}
+      const cells=l.slice(1,-1).split("|").map(c=>inline(c.trim()));
+      html+="<tr>"+cells.map(c=>"<td>"+c+"</td>").join("")+"</tr>";}
+    else if(l===""){close();}
+    else{close();html+="<p>"+inline(l)+"</p>";}
+  }
+  close();return html;
+}
+function llmStatus(msg,err){
+  const el=document.getElementById("llmStatus");
+  el.textContent=msg;el.className="llm-status"+(err?" err":"");
+}
+document.getElementById("promptBtn").addEventListener("click",()=>{
+  if(!records.length){llmStatus("请先记录至少一个方案。",true);return;}
+  const {sys,user}=buildPrompt();
+  const full=sys+"\n\n---\n\n"+user;
+  const box=document.getElementById("csvBox");
+  box.value=full;box.hidden=false;
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(full).then(
+      ()=>llmStatus("分析提示词已复制到剪贴板（含指标定义与全部方案数据），可粘贴到任意大模型。"),
+      ()=>llmStatus("请在下方文本框手动全选复制。"));
+  else llmStatus("请在下方文本框手动全选复制。");
+});
+let lastReport="";
+document.getElementById("genBtn").addEventListener("click",async()=>{
+  if(records.length<2){llmStatus("请先记录至少两个方案（含基准）再生成对比报告。",true);return;}
+  const pool=llmCfgs.filter(c=>c.on&&c.key);
+  if(!pool.length){
+    llmStatus("尚无可用 API 配置：点「API 配置」添加并测试；或用「复制分析提示词」粘贴到任意大模型。",true);
+    document.getElementById("cfgPanel").hidden=false;renderCfgs();return;
+  }
+  const {sys,user}=buildPrompt();
+  const start=llmPtr%pool.length;
+  const errs=[];
+  for(let i=0;i<pool.length;i++){
+    const cfg=pool[(start+i)%pool.length];
+    llmStatus("正在调用 "+cfg.name+"（"+cfg.model+"）… 轮询 "+(i+1)+"/"+pool.length);
+    const t0=performance.now();
+    try{
+      const txt=await llmCall(cfg,sys,user,4096);
+      llmPtr=start+i+1;saveLlm();
+      lastReport=txt;
+      document.getElementById("repOut").innerHTML=mdRender(txt);
+      document.getElementById("copyRepBtn").hidden=false;
+      llmStatus("报告由 "+cfg.name+"（"+cfg.model+"）生成，耗时 "+((performance.now()-t0)/1000).toFixed(1)+" s。");
+      return;
+    }catch(err){errs.push(cfg.name+"："+describeErr(err));}
+  }
+  llmStatus("全部 API 调用失败 — "+errs.join("； "),true);
+});
+document.getElementById("copyRepBtn").addEventListener("click",()=>{
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(lastReport).then(()=>llmStatus("报告 Markdown 已复制。"));
 });
 
 /* ================= UI 绑定 ================= */
