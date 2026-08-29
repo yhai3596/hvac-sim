@@ -1,74 +1,96 @@
-"""验证场景定义与运行辅助（docs/simulation-plan.md 第 2.7 节）。"""
+"""场景构建：地点（ASHRAE 气候）× 季节 × 保温档 × 设备/算法参数。"""
 
 from __future__ import annotations
 
-from .models import Weather, House, Device, Thermostat
-from .algorithms import FixedSpeedBaseline, FixedTes, V144Learner
+from .climate import (LOCATIONS, INSULATION_LEVELS, scenario_params,
+                      w_from_dew)
+from .models import Weather, House, Device, Thermostat, HFG, RHO_AIR
+from .algorithms import FixedSpeedBaseline, FixedTarget, V144Learner
 from .simulator import run, Result
 
+DEFAULT_TSET = {"cooling": 24.5, "heating": 21.1}
 
-def make_algorithm(kind: str, **kw):
+
+def make_algorithm(kind: str, mode: str, **kw):
     if kind == "A":
-        return FixedSpeedBaseline()
+        return FixedSpeedBaseline(mode=mode)
     if kind == "B":
-        return FixedTes(tes=kw.get("tes", 7.0))
+        return FixedTarget(mode=mode, target=kw.get("target"))
     if kind == "C":
-        return V144Learner(**kw)
+        return V144Learner(mode=mode, **kw)
     raise ValueError(kind)
 
 
-def make_stack(kind: str, weather: Weather | None = None,
+def design_load(loc_key: str, insulation: str = "medium",
+                t_set: float | None = None) -> dict:
+    """地点设计负荷估算（用于容量配比显示与预学习初值）。"""
+    loc = LOCATIONS[loc_key]
+    lvl = INSULATION_LEVELS[insulation]
+    t_set = t_set if t_set is not None else DEFAULT_TSET["cooling"]
+    sens = lvl["ua"] * (loc.summer_db04 - t_set) + 0.5 * loc.solar_peak_w + 300.0
+    vol = 160.0 * 2.7
+    m_inf = lvl["ach"] * vol * RHO_AIR / 3600.0
+    w_in = 0.0104   # 24.5℃/55%RH 左右
+    lat = max(0.0, m_inf * (w_from_dew(loc.summer_dew) - w_in) * HFG)
+    return {"sensible_w": sens, "latent_w": lat, "total_w": sens + lat,
+            "heating_w": max(0.0, lvl["ua"] * (21.1 - loc.winter_db996))}
+
+
+def make_stack(kind: str, location: str, scenario: str = "summer_design",
+               insulation: str = "medium", t_set: float | None = None,
                deadband_f: float = 1.0, meas_bias: float = 0.0,
-               t_set: float = 24.5, **algo_kw):
-    """构建一套（天气、房屋、设备、温控器、算法）。"""
-    weather = weather or Weather()
-    house = House(t_room=t_set + 1.5, t_mass=t_set + 0.5)
-    device = Device(variable=(kind != "A"), meas_bias=meas_bias)
+               cfm_per_ton: float = 400.0, fan_mode: str = "auto",
+               q_rated: float = 7000.0, ramp_hz_s: float = 0.5,
+               start_hold_s: float = 180.0, aux_enabled: bool = True,
+               **algo_kw):
+    loc = LOCATIONS[location]
+    sp = scenario_params(loc, scenario)
+    mode = sp["mode"]
+    t_set = t_set if t_set is not None else DEFAULT_TSET[mode]
+    weather = Weather(t_mean=sp["t_mean"], t_amp=sp["t_amp"],
+                      dew_point=sp["dew_point"], solar_peak_w=sp["solar_peak_w"])
+    lvl = INSULATION_LEVELS[insulation]
+    if mode == "cooling":
+        t0, m0 = t_set + 1.5, t_set + 0.5
+        w0 = w_from_dew(min(sp["dew_point"], t_set - 3.0))
+    else:
+        t0, m0 = t_set - 1.5, t_set - 0.5
+        w0 = w_from_dew(2.0)
+    house = House(ua=lvl["ua"], ach=lvl["ach"], t_room=t0, t_mass=m0, w_room=w0)
+    device = Device(variable=(kind != "A"), meas_bias=meas_bias,
+                    cfm_per_ton=cfm_per_ton, fan_mode=fan_mode,
+                    q_rated=q_rated, q_rated_heat=q_rated * 1.09,
+                    ramp_hz_s=ramp_hz_s, start_hold_s=start_hold_s,
+                    aux_enabled=aux_enabled)
     thermostat = Thermostat(t_set=t_set, deadband=deadband_f * 5.0 / 9.0)
-    algo = make_algorithm(kind, **algo_kw)
+    algo = make_algorithm(kind, mode, **algo_kw)
     return weather, house, device, thermostat, algo
 
 
-def run_scenario(kind: str, days: float = 3.0, record_series: bool = False,
+def run_scenario(kind: str, location: str, scenario: str = "summer_design",
+                 days: float = 3.0, record_series: bool = False,
                  **kw) -> Result:
-    weather, house, device, thermostat, algo = make_stack(kind, **kw)
+    weather, house, device, thermostat, algo = make_stack(
+        kind, location, scenario, **kw)
     res = run(algo, weather, house, device, thermostat,
               days=days, record_series=record_series)
     res.algo = algo
     return res
 
 
-# ---- 预置场景 ----
-
-def s1_design_day(kind: str, **kw) -> Result:
-    """S1 设计日稳态：恒定 35℃，V1.44 预学习完成。"""
-    w = Weather(t_mean=35.0, t_amp=0.0, solar_peak_w=2000.0)
-    if kind == "C":
-        kw.setdefault("prelearn_q", None)  # 由 run_validation 注入标定值
-    return run_scenario(kind, days=3.0, weather=w, **kw)
-
-
-def s2_summer_week(kind: str, **kw) -> Result:
-    """S2 典型夏周：30±5℃ × 7 天，冷启动学习。"""
-    w = Weather(t_mean=30.0, t_amp=5.0)
-    return run_scenario(kind, days=7.0, weather=w, **kw)
-
-
-def s3_mild_season(kind: str, **kw) -> Result:
-    """S3 轻负荷季：24±4℃。"""
-    w = Weather(t_mean=24.0, t_amp=4.0, solar_peak_w=1800.0)
-    return run_scenario(kind, days=3.0, weather=w, t_set=23.0, **kw)
-
-
-def s4_setpoint_step(kind: str, **kw) -> Result:
-    """S4 设定阶跃：稳态运行 1 天后 T_set 从 25.5→24.0℃，观察 pull-down。"""
-    weather = Weather(t_mean=32.0, t_amp=4.0)
-    weather_, house, device, thermostat, algo = make_stack(
-        kind, weather=weather, t_set=25.5, **kw)
-    r1 = run(algo, weather, house, device, thermostat, days=1.0)
-    thermostat.t_set = 24.0
-    r2 = run(algo, weather, house, device, thermostat, days=1.0,
-             t_start=12 * 3600.0 + 1 * 86400.0, record_series=True)
-    r2.name = algo.name
-    r2.algo = algo
-    return r2
+def run_setpoint_step(kind: str, location: str, step_c: float = 1.5,
+                      days_pre: float = 1.0, days_post: float = 1.0,
+                      scenario: str = "summer_design", **kw) -> Result:
+    """稳态运行后设定温度下调 step_c，观察 pull-down。"""
+    weather, house, device, thermostat, algo = make_stack(
+        kind, location, scenario, **kw)
+    thermostat.t_set += step_c          # 先在较高设定稳态
+    house.t_room = thermostat.t_set + 1.5
+    house.t_mass = thermostat.t_set + 0.5
+    run(algo, weather, house, device, thermostat, days=days_pre)
+    thermostat.t_set -= step_c
+    res = run(algo, weather, house, device, thermostat, days=days_post,
+              t_start=12 * 3600.0 + days_pre * 86400.0)
+    res.name = algo.name
+    res.algo = algo
+    return res
