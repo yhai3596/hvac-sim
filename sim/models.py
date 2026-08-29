@@ -121,10 +121,16 @@ class Device:
     start_hold_s: float = 180.0       # 启动低频保持（回油）s
     ramp_hz_s: float = 0.5            # 最大爬升速率 Hz/s
     ki: float = 0.02                  # 积分增益 Hz/s 每 K 偏差
-    # 内机风量
-    cfm_per_ton: float = 400.0        # 匹配风量（外部条件或配套可控）
-    fan_w_per_cfm: float = 0.35
-    fan_mode: str = "auto"            # auto=停机延迟 90s 关风机 / on=常开
+    # 内机风量：cfm_per_ton 为 100% 风量基准；三种风量模式（用户产品定义）
+    cfm_per_ton: float = 400.0        # 100% 风量基准（跨品牌匹配变量）
+    fan_ctrl: str = "fixed"           # fixed=固定100% / two=两档(70%/100%) / auto=自动风
+    two_stage: int = 2                # 两档模式当前档位：1→70%，2→100%
+    auto_init: float = 0.60           # 自动风：启动初始风量比例
+    auto_wait_s: float = 3000.0       # 自动风：初始风量保持时长（默认 50min）
+    auto_step_s: float = 600.0        # 自动风：之后每隔多久提一档（默认 10min）
+    auto_step: float = 0.10           # 自动风：每档提高的比例（默认 10%）
+    fan_w_per_cfm: float = 0.35       # 100% 风量下的比功率；分档按风机定律立方折算
+    fan_mode: str = "auto"            # 停机风机策略：auto=延迟 90s 关 / on=常开
     bf_400: float = 0.15              # 400 CFM/ton 时旁通因子
     # 性能曲线斜率
     kq_oat_c: float = 0.010           # 制冷：室外温度每降 1℃ 能力增益
@@ -158,10 +164,24 @@ class Device:
     te: float = field(default=7.0, repr=False)
     tc: float = field(default=40.0, repr=False)
     shr: float = field(default=1.0, repr=False)
+    fan_pct: float = field(default=1.0, repr=False)   # 当前风量比例
+
+    def _update_fan(self) -> None:
+        """按风量模式计算当前风量比例（运转期调用；run_t 已更新）。"""
+        if self.fan_ctrl == "two":
+            self.fan_pct = 0.70 if self.two_stage == 1 else 1.0
+        elif self.fan_ctrl == "auto":
+            if self.run_t < self.auto_wait_s:
+                self.fan_pct = self.auto_init
+            else:
+                steps = 1 + int((self.run_t - self.auto_wait_s) // self.auto_step_s)
+                self.fan_pct = min(1.0, self.auto_init + self.auto_step * steps)
+        else:
+            self.fan_pct = 1.0
 
     @property
     def flow_factor(self) -> float:
-        return self.cfm_per_ton / 400.0
+        return self.cfm_per_ton * self.fan_pct / 400.0
 
     @property
     def cap_ff(self) -> float:
@@ -169,7 +189,8 @@ class Device:
 
     def fan_power(self) -> float:
         tons = self.q_rated / TON_W
-        return self.cfm_per_ton * tons * self.fan_w_per_cfm
+        # 风机定律：功率 ∝ 风量³
+        return self.cfm_per_ton * tons * self.fan_w_per_cfm * self.fan_pct ** 3
 
     # ---- 主步进 ----
     def step(self, dt: float, mode: str, call: bool, t_out: float, w_out: float,
@@ -189,6 +210,7 @@ class Device:
                 self.f_hz = self.f_start
                 self.run_t = 0.0
             self.run_t += dt
+            self._update_fan()
             cap_ft = 1.0 + self.kq_oat_c * (35.0 - t_out)
             q_ss = self.q_rated * (self.f_hz / self.f_rated) ** 0.95 * cap_ft * self.cap_ff
             self.te = t_room - self.dt_coil_c * (q_ss / self.q_rated) / self.flow_factor
@@ -262,6 +284,7 @@ class Device:
             self.f_hz = self.f_start
             self.run_t = 0.0
         self.run_t += dt
+        self._update_fan()
         if humid_cold:
             # -7~5℃ 湿冷区结霜最快；更低温空气干燥，结霜减慢
             rate = 1.0 if t_out > -7.0 else 0.4

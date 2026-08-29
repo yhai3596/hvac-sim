@@ -163,6 +163,52 @@ def test_setpoint_step():
     assert r.pulldown_s is not None and r.pulldown_s > 0
 
 
+def test_fan_modes():
+    from .climate import w_from_dew as wd
+    w = wd(20.0)
+    # 两档风：1 档 70%
+    d = Device(fan_ctrl="two", two_stage=1)
+    d.step(10, "cooling", True, 33.0, w, 7.0, 25.0, w, 24.5)
+    assert abs(d.fan_pct - 0.70) < 1e-9
+    # 自动风：60% 起，50min 内保持，之后每 10min +10% 直到 100%
+    d2 = Device(fan_ctrl="auto")
+    for _ in range(6 * 49):      # 49 min
+        d2.step(10, "cooling", True, 33.0, w, 7.0, 25.0, w, 24.5)
+    assert abs(d2.fan_pct - 0.60) < 1e-9
+    for _ in range(6 * 2):       # 51 min：第一次提档
+        d2.step(10, "cooling", True, 33.0, w, 7.0, 25.0, w, 24.5)
+    assert abs(d2.fan_pct - 0.70) < 1e-9
+    for _ in range(6 * 45):      # 96 min：应到 100% 封顶
+        d2.step(10, "cooling", True, 33.0, w, 7.0, 25.0, w, 24.5)
+    assert abs(d2.fan_pct - 1.00) < 1e-9
+    # 停机重启 → 回到初始风量
+    for _ in range(6 * 10):
+        d2.step(10, "cooling", False, 33.0, w, 7.0, 25.0, w, 24.5)
+    d2.step(10, "cooling", True, 33.0, w, 7.0, 25.0, w, 24.5)
+    assert abs(d2.fan_pct - 0.60) < 1e-9
+    # 自动风参数可调
+    d3 = Device(fan_ctrl="auto", auto_init=0.5, auto_wait_s=600, auto_step_s=300,
+                auto_step=0.25)
+    for _ in range(6 * 16):      # 16 min：600s 保持 + 2 次 +25%
+        d3.step(10, "cooling", True, 33.0, w, 7.0, 25.0, w, 24.5)
+    assert abs(d3.fan_pct - 1.00) < 1e-9
+
+
+def test_satisfaction_anchor():
+    from .scenarios import make_stack
+    for sat in (0.7, 1.0, 1.3):
+        _, house, device, th, _ = make_stack("B", "miami", tons=3.0,
+                                             satisfaction=sat)
+        # 反算：缩放后设计负荷 × 满足度 = 额定能力
+        from .scenarios import design_load
+        base = design_load("miami")
+        scale = house.ua / 350.0
+        assert abs(base["total_w"] * scale * sat - 3 * 3517.0) / (3 * 3517.0) < 0.02
+    # 5 Ton 选择生效
+    _, _, dev5, _, _ = make_stack("B", "miami", tons=5.0, satisfaction=1.0)
+    assert abs(dev5.q_rated - 5 * 3517.0) < 1e-6
+
+
 def main():
     fns = [v for k, v in globals().items() if k.startswith("test_")]
     for fn in fns:

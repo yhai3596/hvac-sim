@@ -179,27 +179,55 @@ table.bins td b,table.records td b{color:var(--ink);font-weight:600}
     <div class="readout"><span>设计负荷 显热+潜热</span><b id="ro_load">—</b></div>
   </div>
   <div class="panel">
-    <h2>设备与容量配比</h2>
-    <div class="param"><label>额定制冷能力</label><span class="val"><span id="v_qr"></span> kW</span>
-      <input type="range" id="p_qr" min="3.5" max="12" step="0.25"></div>
-    <div class="readout"><span>容量配比（额定/设计负荷）</span><b id="ro_sizing">—</b></div>
+    <h2>设备与负荷满足度</h2>
+    <div class="param"><label>能力段</label><span class="val"></span></div>
+    <div class="radio-row" id="tonSel">
+      <button class="chip on" data-t="3">3 Ton（10.6 kW）</button>
+      <button class="chip" data-t="5">5 Ton（17.6 kW）</button>
+    </div>
+    <div class="param"><label>负荷满足度（额定/设计负荷）</label><span class="val"><span id="v_sat"></span> %</span>
+      <input type="range" id="p_sat" min="50" max="150" step="5"></div>
+    <div class="readout"><span>等效设计负荷 / 负荷缩放</span><b id="ro_sizing">—</b></div>
     <div class="param"><label>能力测量偏差（Gr×Δh）</label><span class="val"><span id="v_bias"></span> %</span>
       <input type="range" id="p_bias" min="-20" max="20" step="1"></div>
     <div class="param"><label>辅助电热（制热）</label><span class="val"><span id="v_aux"></span> kW</span>
       <input type="range" id="p_aux" min="0" max="15" step="1"></div>
+    <p class="hint">满足度锚定负荷总量（100% = 额定能力恰好覆盖设计负荷）；房屋参数决定负荷构成与热惯性。</p>
   </div>
   <div class="panel">
-    <h2>内机风量（跨品牌匹配）</h2>
-    <div class="param"><label>匹配风量</label><span class="val"><span id="v_cfm"></span> CFM/ton</span>
+    <h2>内机风量</h2>
+    <div class="param"><label>100% 风量基准</label><span class="val"><span id="v_cfm"></span> CFM/ton</span>
       <input type="range" id="p_cfm" min="300" max="460" step="10"></div>
-    <label class="checkline"><input type="checkbox" id="p_paired">配套内机模式（风量随压缩机频率联动）</label>
+    <div class="param"><label>风量模式</label><span class="val"></span></div>
+    <div class="radio-row" id="fanCtrlSel">
+      <button class="chip on" data-fc="fixed">固定 100%</button>
+      <button class="chip" data-fc="two">两档风</button>
+      <button class="chip" data-fc="auto">自动风</button>
+    </div>
+    <div id="fanTwo" style="display:none">
+      <div class="radio-row" id="stageSel">
+        <button class="chip" data-s="1">1 档（70%）</button>
+        <button class="chip on" data-s="2">2 档（100%）</button>
+      </div>
+    </div>
+    <div id="fanAuto" style="display:none">
+      <div class="param"><label>启动初始风量</label><span class="val"><span id="v_ainit"></span> %</span>
+        <input type="range" id="p_ainit" min="40" max="90" step="5"></div>
+      <div class="param"><label>初始风量保持</label><span class="val"><span id="v_await"></span> min</span>
+        <input type="range" id="p_await" min="10" max="90" step="5"></div>
+      <div class="param"><label>提档间隔</label><span class="val"><span id="v_aint"></span> min</span>
+        <input type="range" id="p_aint" min="5" max="20" step="1"></div>
+      <div class="param"><label>每档提高</label><span class="val"><span id="v_astep"></span> %</span>
+        <input type="range" id="p_astep" min="5" max="20" step="5"></div>
+      <p class="hint">达温停机后再次启动按初始风量；保持时长内未达温则按间隔逐档提高，直到 100%。外机按自身逻辑运行。</p>
+    </div>
     <div class="param"><label>停机风机策略</label><span class="val"></span></div>
     <div class="radio-row" id="fanSel">
       <button class="chip on" data-f="auto">AUTO（延迟90s停）</button>
       <button class="chip" data-f="on">常开</button>
     </div>
     <div class="readout"><span>当前风量 / 旁通因子</span><b id="ro_cfm">—</b></div>
-    <p class="hint">无通讯架构下风量是外部匹配条件；配套模式模拟自家内机风量联动（350→460 随频率）。常开风机会把盘管存水再蒸发回房间。</p>
+    <p class="hint">低风量段盘管更冷 → 除湿强、显热弱。常开风机会把盘管存水再蒸发回房间。</p>
   </div>
   <div class="panel">
     <h2>压缩机</h2>
@@ -389,8 +417,9 @@ const P={
   loc:"houston", scen:"summer_typical", mode:"cooling",
   tmean:30, tamp:5, dew:22.5, solar:2.2,
   ins:"medium", ua:350, ach:0.6, qint:300, mgain:0.3,
-  qr:7, bias:0, aux:8,
-  cfm:400, paired:false, fan:"auto",
+  tons:3, qr:3*3.517, sat:100, bias:0, aux:8,
+  cfm:400, fanCtrl:"fixed", twoStage:2,
+  autoInit:60, autoWait:50, autoInt:10, autoStep:10, fan:"auto",
   fstart:30, hold:180, ramp:0.5, fmax:65,
   tset:24.5, db:1.0,
   algo:"C", tgtb:7,
@@ -413,14 +442,22 @@ function designLoad(){
   const heat=Math.max(500,P.ua*(21.1-(P.tmean-P.tamp)));
   return {sens,lat,total:sens+lat,heat};
 }
+function loadScale(){
+  // 负荷满足度锚定：把负荷源等比缩放，使 额定能力/设计负荷 = 满足度
+  const dl=designLoad();
+  const anchor=P.mode==="cooling"?dl.total:dl.heat;
+  const cap=P.mode==="cooling"?P.qr*1000:P.qr*1000*1.09;
+  return cap/((P.sat/100)*Math.max(anchor,1));
+}
 function prelearnQ(){
+  const LS=loadScale();
   if(P.mode==="cooling"){
     const solarAvg=P.solar*1000*(2/Math.PI)*13/24;
     const mInf=P.ach*160*2.7*RHO/3600;
     const lat=Math.max(0,mInf*(wFromDew(P.dew)-0.0104)*HFG);
-    return Math.max(600,(P.ua*Math.max(1,P.tmean-P.tset)+solarAvg+P.qint+lat));
+    return Math.max(600,(P.ua*Math.max(1,P.tmean-P.tset)+solarAvg+P.qint+lat)*LS);
   }
-  return Math.max(600,P.ua*Math.max(1,P.tset-P.tmean)*0.9);
+  return Math.max(600,P.ua*Math.max(1,P.tset-P.tmean)*0.9*LS);
 }
 
 /* ================= V1.44 学习器 ================= */
@@ -558,9 +595,9 @@ function resetAll(){
      w:cool?wFromDew(Math.min(P.dew,P.tset-3)):wFromDew(2),
      call:false,thS:-1e9,thSw:-1e9,prevCall:false,
      fHz:0,qDel:0,runT:0,offT:1e9,coilW:0,frost:0,defLeft:0,auxOn:false,
-     te:7,tc:40,shr:1,cfmEff:P.cfm,
+     te:7,tc:40,shr:1,fanPct:1,
      algo:makeAlgo(),
-     buf:{t:[],tr:[],tout:[],q:[],tgt:[],lo:[],hi:[],call:[],rh:[],hz:[],def:[]},nextBuf:0,
+     buf:{t:[],tr:[],tout:[],q:[],tgt:[],lo:[],hi:[],call:[],rh:[],hz:[],def:[],fan:[]},nextBuf:0,
      cycles:[],cur:null,pulldown:null,t0:12*3600,
      energy:0,aux:0,cool:0,lat:0,dehum:0,sq:0,n:0,oob:0,rhSum:0,rhOver:0,defCount:0,defPrev:false};
   refreshAll();
@@ -572,19 +609,33 @@ function resetStats(){
   S.rhSum=0;S.rhOver=0;S.defCount=0;
 }
 
+function fanPctNow(){
+  // 三种内机风量模式（基于当前循环运转时长 S.runT）
+  if(P.fanCtrl==="two")return P.twoStage===1?0.70:1.0;
+  if(P.fanCtrl==="auto"){
+    if(S.runT<P.autoWait*60)return P.autoInit/100;
+    const steps=1+Math.floor((S.runT-P.autoWait*60)/(P.autoInt*60));
+    return Math.min(1,P.autoInit/100+(P.autoStep/100)*steps);
+  }
+  return 1.0;
+}
 function deviceStep(dt,call,tout,wout,target){
   const cool=P.mode==="cooling";
   const ffTons=P.qr*1000/TON;
-  // 配套模式：风量随频率联动
-  S.cfmEff=P.paired?Math.min(460,Math.max(300,300+(S.fHz/DEV.fRated)*160)):P.cfm;
-  const ff=S.cfmEff/400, capFF=1+0.35*(ff-1);
-  const fanW=S.cfmEff*ffTons*DEV.fanWcfm;
   const variable=P.algo!=="A";
+  // 风量与派生量在各分支内（runT 更新后）计算
+  const fanDerived=()=>{
+    S.fanPct=fanPctNow();
+    const ff=P.cfm*S.fanPct/400;
+    return {ff,capFF:1+0.35*(ff-1),
+            fanW:P.cfm*ffTons*DEV.fanWcfm*Math.pow(S.fanPct,3)};
+  };
   if(cool){
     if(call){
       S.offT=0;
       if(S.fHz<=0){S.fHz=P.fstart;S.runT=0;}
       S.runT+=dt;
+      const {ff,capFF,fanW}=fanDerived();
       const capFT=1+DEV.kqC*(35-tout);
       const qSS=P.qr*1000*Math.pow(S.fHz/DEV.fRated,0.95)*capFT*capFF;
       S.te=S_tr()-DEV.dtC*(qSS/(P.qr*1000))/ff;
@@ -618,13 +669,14 @@ function deviceStep(dt,call,tout,wout,target){
     if(S.qDel<1)S.qDel=0;
     let reevap=0;
     const fanRun=(P.fan==="on")||(S.offT<=90);
+    const fanWOff=P.cfm*ffTons*DEV.fanWcfm*Math.pow(S.fanPct,3);
     if(fanRun&&S.coilW>1e-4){
       let rate=S.coilW/(P.fan==="on"?600:90);
       rate=Math.min(rate,S.coilW/dt);
       S.coilW-=rate*dt;
       reevap=rate*HFG;
     }
-    return {qs:0,lat:0,reevap,power:fanRun?fanW:0,auxW:0};
+    return {qs:0,lat:0,reevap,power:fanRun?fanWOff:0,auxW:0};
   }
   // ---- 制热 ----
   if(!call){
@@ -642,6 +694,7 @@ function deviceStep(dt,call,tout,wout,target){
   }
   if(S.fHz<=0){S.fHz=P.fstart;S.runT=0;}
   S.runT+=dt;
+  const {ff,capFF,fanW}=fanDerived();
   if(humidCold){
     S.frost+=(tout>-7?1:0.4)*dt;
     if(S.frost>=DEV.defInt){S.frost=0;S.defLeft=DEV.defDur;}
@@ -674,7 +727,8 @@ function auxHeat(dt,defrosting){
 const S_tr=()=>S.tr;
 
 function stepOnce(){
-  const t=S.t, tout=outdoorTemp(t), qsol=solarGain(t), wout=wFromDew(P.dew);
+  const LS=loadScale();   // 满足度锚定的负荷缩放
+  const t=S.t, tout=outdoorTemp(t), qsol=solarGain(t)*LS, wout=wFromDew(P.dew);
   const dbC=P.db*5/9, cool=P.mode==="cooling";
   // 温控器
   if(t-S.thS>=60){
@@ -692,14 +746,14 @@ function stepOnce(){
   const qmeas=(call&&S.defLeft<=0)?S.qDel*(1+P.bias/100):0;
   const tgt=algoTarget(t,DT,call,tout,qmeas);
   const out=deviceStep(DT,call,tout,wout,tgt);
-  // 房间（2R2C + 湿平衡）
-  const gains=qsol+P.qint;
-  const dqa=P.ua*(tout-S.tr)+500*(S.tm-S.tr)+0.4*gains-out.qs;
+  // 房间（2R2C + 湿平衡；负荷源按满足度缩放）
+  const gains=qsol+P.qint*LS;
+  const dqa=P.ua*LS*(tout-S.tr)+500*(S.tm-S.tr)+0.4*gains-out.qs;
   const dqm=500*(S.tr-S.tm)+0.6*gains;
   S.tr+=dqa/3.0e6*DT;
   S.tm+=dqm/40.0e6*DT;
-  const mInf=P.ach*160*2.7*RHO/3600;
-  const dw=(mInf*(wout-S.w)+P.mgain/3600-out.lat/HFG+out.reevap/HFG)/(RHO*160*2.7*15);
+  const mInf=P.ach*LS*160*2.7*RHO/3600;
+  const dw=(mInf*(wout-S.w)+P.mgain*LS/3600-out.lat/HFG+out.reevap/HFG)/(RHO*160*2.7*15);
   S.w=Math.max(0.001,S.w+dw*DT);
   // 循环事件
   if(call&&!S.prevCall){S.cur={tOn:t,t2:0,t1:0,hzPeak:0,hwm:[],hz95:null};S.cycles.push(S.cur);
@@ -736,6 +790,7 @@ function stepOnce(){
     b.q.push(Math.abs(out.qs)/1000);b.tgt.push(P.algo==="A"?nomTgt():tgt);
     b.lo.push(P.tset-dbC/2);b.hi.push(P.tset+dbC/2);
     b.call.push(call?1:0);b.rh.push(rh*100);b.hz.push(S.fHz);b.def.push(defr?1:0);
+    b.fan.push(call?Math.round(S.fanPct*100):0);
     if(b.t.length>20160)for(const k in b)b[k].splice(0,1440);
     S.nextBuf=t+60;
   }
@@ -926,6 +981,7 @@ bindHover("chTemp","ttTemp",[
 ]);
 bindHover("chRh",  "ttRh", [["RH",i=>S.buf.rh[i].toFixed(1)+" %"]]);
 bindHover("chHz",  "ttHz", [["频率",i=>S.buf.hz[i].toFixed(1)+" Hz"],
+  ["内机风量",i=>S.buf.fan[i]?S.buf.fan[i]+" %":"—"],
   ["状态",i=>S.buf.def[i]?"化霜":(S.buf.call[i]?"运转":"停机")]]);
 bindHover("chCap","ttCap",[["能力",i=>S.buf.q[i].toFixed(2)+" kW"]]);
 bindHover("chTgt","ttTgt",[["目标",i=>S.buf.tgt[i].toFixed(2)+" ℃"]]);
@@ -1043,10 +1099,12 @@ function recordRun(){
   const m=metrics();
   if(m.days*24<2){document.getElementById("recHint").textContent="⚠ 统计时长不足 2 小时，先运行一段再记录";return;}
   document.getElementById("recHint").textContent="";
+  const fanDesc={fixed:"固定100%",two:"两档"+(P.twoStage===1?"·1档70%":"·2档"),
+    auto:"自动风("+P.autoInit+"%/"+P.autoWait+"min/+"+P.autoStep+"%每"+P.autoInt+"min)"}[P.fanCtrl];
   const rec={name:"方案"+(records.length+1),
     desc:LOCATIONS[P.loc].name+" · "+({summer_design:"夏设计",summer_typical:"典夏",winter_design:"冬设计",winter_typical:"典冬"})[P.scen]
-      +" · "+P.algo+(P.algo==="C"?("(TA"+P.ta+")"):"")+" · "+P.qr+"kW · "+P.cfm+"cfm · 回差"+P.db+"°F"
-      +" · 统计"+(m.days*24).toFixed(1)+"h",
+      +" · "+P.algo+(P.algo==="C"?("(TA"+P.ta+")"):"")+" · "+P.tons+"Ton·满足度"+P.sat+"% · "
+      +fanDesc+" · 回差"+P.db+"°F · 统计"+(m.days*24).toFixed(1)+"h",
     baseline:records.length===0,m:{}};
   for(const [,k] of REC_COLS)rec.m[k]=m[k]!==m[k]||m[k]===null?null:+m[k];
   records.push(rec);saveRecords();renderRecords();
@@ -1105,8 +1163,10 @@ document.getElementById("csvBtn").addEventListener("click",()=>{
 const SLIDERS=[
   ["p_tmean","v_tmean","tmean",1],["p_tamp","v_tamp","tamp",1],["p_dew","v_dew","dew",1],["p_solar","v_solar","solar",1],
   ["p_ua","v_ua","ua",0],["p_ach","v_ach","ach",2],["p_qint","v_qint","qint",0],["p_mgain","v_mgain","mgain",2],
-  ["p_qr","v_qr","qr",2],["p_bias","v_bias","bias",0],["p_aux","v_aux","aux",0],
+  ["p_sat","v_sat","sat",0],["p_bias","v_bias","bias",0],["p_aux","v_aux","aux",0],
   ["p_cfm","v_cfm","cfm",0],
+  ["p_ainit","v_ainit","autoInit",0],["p_await","v_await","autoWait",0],
+  ["p_aint","v_aint","autoInt",0],["p_astep","v_astep","autoStep",0],
   ["p_fstart","v_fstart","fstart",0],["p_hold","v_hold","hold",0],["p_ramp","v_ramp","ramp",1],["p_fmax","v_fmax","fmax",0],
   ["p_tset","v_tset","tset",1],["p_db","v_db","db",2],
   ["p_tgtb","v_tgtb","tgtb",1],
@@ -1118,12 +1178,16 @@ function refreshSliders(){
     document.getElementById(vid).textContent=(+P[key]).toFixed(dec);
   }
   document.getElementById("p_pre").checked=P.pre;
-  document.getElementById("p_paired").checked=P.paired;
   document.getElementById("insSel").value=P.ins;
   document.getElementById("locSel").value=P.loc;
   document.getElementById("scenSel").value=P.scen;
   document.querySelectorAll("#algoSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.a===P.algo));
   document.querySelectorAll("#fanSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.f===P.fan));
+  document.querySelectorAll("#tonSel .chip").forEach(c=>c.classList.toggle("on",+c.dataset.t===P.tons));
+  document.querySelectorAll("#fanCtrlSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.fc===P.fanCtrl));
+  document.querySelectorAll("#stageSel .chip").forEach(c=>c.classList.toggle("on",+c.dataset.s===P.twoStage));
+  document.getElementById("fanTwo").style.display=P.fanCtrl==="two"?"":"none";
+  document.getElementById("fanAuto").style.display=P.fanCtrl==="auto"?"":"none";
   document.getElementById("algoB").style.display=P.algo==="B"?"":"none";
   document.getElementById("algoC").style.display=P.algo==="C"?"":"none";
   document.getElementById("tgtName").textContent=P.mode==="cooling"?"Tes":"Tcs";
@@ -1136,12 +1200,15 @@ function renderReadouts(){
   document.getElementById("ro_load").textContent=P.mode==="cooling"
     ?(dl.sens/1000).toFixed(1)+" + "+(dl.lat/1000).toFixed(1)+" kW"
     :"制热 "+(dl.heat/1000).toFixed(1)+" kW";
-  const ratio=P.mode==="cooling"?P.qr*1000/dl.total:P.qr*1000*DEV.qHfac/dl.heat;
-  document.getElementById("ro_sizing").textContent=ratio.toFixed(2)
-    +(ratio<0.9?"（不足）":ratio>1.5?"（过大）":"");
-  const ff=(S?S.cfmEff:P.cfm)/400;
-  document.getElementById("ro_cfm").textContent=(S?S.cfmEff.toFixed(0):P.cfm)+" · BF "
-    +Math.pow(DEV.bf400,1/ff).toFixed(2);
+  const LS=loadScale();
+  const anchor=P.mode==="cooling"?dl.total:dl.heat;
+  document.getElementById("ro_sizing").textContent=
+    (anchor*LS/1000).toFixed(1)+" kW · ×"+LS.toFixed(2);
+  const pct=S?S.fanPct:1;
+  const ff=P.cfm*pct/400;
+  document.getElementById("ro_cfm").textContent=
+    (P.cfm*pct).toFixed(0)+"（"+(pct*100).toFixed(0)+"%）· BF "
+    +Math.pow(DEV.bf400,1/Math.max(ff,0.1)).toFixed(2);
 }
 for(const [pid,vid,key,dec] of SLIDERS){
   document.getElementById(pid).addEventListener("input",e=>{
@@ -1166,7 +1233,18 @@ document.getElementById("insSel").addEventListener("change",e=>{
   P.ins=e.target.value;P.ua=INS[P.ins].ua;P.ach=INS[P.ins].ach;refreshSliders();
 });
 document.getElementById("p_pre").addEventListener("change",e=>{P.pre=e.target.checked;resetStats();refreshAll();});
-document.getElementById("p_paired").addEventListener("change",e=>{P.paired=e.target.checked;});
+document.getElementById("tonSel").addEventListener("click",e=>{
+  const t=e.target.dataset.t;if(!t)return;
+  P.tons=+t;P.qr=P.tons*3.517;refreshSliders();
+});
+document.getElementById("fanCtrlSel").addEventListener("click",e=>{
+  const fc=e.target.dataset.fc;if(!fc)return;
+  P.fanCtrl=fc;refreshSliders();
+});
+document.getElementById("stageSel").addEventListener("click",e=>{
+  const s=e.target.dataset.s;if(!s)return;
+  P.twoStage=+s;refreshSliders();
+});
 document.getElementById("algoSel").addEventListener("click",e=>{
   const a=e.target.dataset.a;if(!a)return;
   P.algo=a;if(a==="B")P.tgtb=nomTgt();
