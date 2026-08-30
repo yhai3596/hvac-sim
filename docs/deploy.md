@@ -15,10 +15,16 @@ Windows 上如果 `python3` 不识别，把命令里的 `python3` 换成 `python
 ### 1.2 启动（推荐方式）
 
 ```bash
-git clone https://github.com/yhai3596/-.git
-cd -
+git clone https://github.com/yhai3596/-.git hvac-sim
+cd hvac-sim
 python3 web/serve.py
 ```
+
+> **克隆时务必指定目录名。** 本仓库名是单个连字符 `-`，直接 `git clone …/-.git` 会得到一个
+> 名为 `-` 的目录，而 `cd -` 在 bash/zsh 里是「回到上一个目录」的内置语义、**不会**进入这个
+> 目录（`cd -- -` 同样无效，bash 对 `-` 的特判在 `--` 之后）。若已经克隆成了 `-`，用
+> `cd ./-` 或 `cd "$PWD/-"` 进入，或者不进目录直接 `python3 ./-/web/serve.py`——
+> `serve.py` 的路径由自身位置推出，在哪个工作目录运行都可以。
 
 脚本会构建 `dist/index.html` 并在 <http://127.0.0.1:8000> 启动服务、自动打开浏览器。
 常用参数：

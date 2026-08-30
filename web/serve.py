@@ -94,6 +94,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     """静态资源强制 text/html; charset=utf-8 并禁用缓存；可选把 /api/<名字>/ 反代到大模型接口。"""
 
     backends: dict = {}
+    # extensions_map 是文档化的类属性，优先级高于 mimetypes 猜测，跨 Python 版本稳定
+    extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
+                      ".html": "text/html; charset=utf-8",
+                      ".htm": "text/html; charset=utf-8"}
 
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(DIST), **kw)
@@ -181,7 +185,14 @@ def main() -> None:
             print("⚠ 未发现 AC_API_*_URL 环境变量，反代未挂载任何后端")
 
     socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((args.host, args.port), Handler) as httpd:
+    try:
+        httpd = socketserver.TCPServer((args.host, args.port), Handler)
+    except OSError as e:
+        raise SystemExit(
+            f"无法在 {args.host}:{args.port} 启动（{e.strerror or e}）。\n"
+            f"端口可能已被占用，换一个即可：python3 web/serve.py --port {args.port + 1}\n"
+            f"查看占用者：lsof -i :{args.port}")
+    with httpd:
         url = f"http://{'127.0.0.1' if args.host == '0.0.0.0' else args.host}:{args.port}/"
         print(f"仿真台已启动：{url}")
         if args.host == "0.0.0.0":

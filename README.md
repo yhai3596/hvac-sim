@@ -29,6 +29,9 @@
 ## 快速开始
 
 ```bash
+# 仓库名是单个连字符，克隆时请指定目录名（否则 cd - 会被 shell 当成"回到上一个目录"）
+git clone https://github.com/yhai3596/-.git hvac-sim && cd hvac-sim
+
 python3 web/serve.py             # 构建并在 http://127.0.0.1:8000 打开交互式仿真台
 python3 -m sim.test_sim          # 单元测试（17 项）
 python3 -m sim.run_validation    # 运行 V0~V10 验证场景，重新生成数据表
