@@ -1,0 +1,5 @@
+# Windows 批处理必须是 CRLF：cmd.exe 对纯 LF 的批处理在 goto/多行块上有已知的解析问题
+*.bat text eol=crlf
+# 这两个反过来，必须保持 LF（shebang 脚本带 \r 会报 bad interpreter）
+*.command text eol=lf
+*.py text eol=lf

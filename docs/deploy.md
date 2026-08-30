@@ -1,6 +1,6 @@
 # 本地使用与服务器部署
 
-整个平台没有任何第三方依赖：前端是一个 136 KB 的单 HTML 文件（无外部脚本、无 CDN、无字体
+整个平台没有任何第三方依赖：前端是一个 160 KB 的单 HTML 文件（无外部脚本、无 CDN、无字体
 外链），后端仿真核心是纯标准库 Python。因此"部署"本质上就是把一个静态文件放到能访问的地方。
 
 ---
@@ -12,12 +12,13 @@
 只需要 **Python 3.8+**（`python3 -V` 能输出版本即可）。不需要 Node、npm、任何构建工具。
 Windows 上如果 `python3` 不识别，把命令里的 `python3` 换成 `python`。
 
-### 1.2 启动（推荐方式）
+### 1.2 启动
+
+第一次要先把仓库拿下来（只需一次）：
 
 ```bash
 git clone https://github.com/yhai3596/-.git hvac-sim
 cd hvac-sim
-python3 web/serve.py
 ```
 
 > **克隆时务必指定目录名。** 本仓库名是单个连字符 `-`，直接 `git clone …/-.git` 会得到一个
@@ -26,8 +27,30 @@ python3 web/serve.py
 > `cd ./-` 或 `cd "$PWD/-"` 进入，或者不进目录直接 `python3 ./-/web/serve.py`——
 > `serve.py` 的路径由自身位置推出，在哪个工作目录运行都可以。
 
-脚本会构建 `dist/index.html` 并在 <http://127.0.0.1:8000> 启动服务、自动打开浏览器。
-常用参数：
+之后每次使用，两种方式二选一。
+
+**方式一：双击启动器（推荐，不用记命令）**
+
+| 系统 | 双击这个文件 |
+| --- | --- |
+| macOS / Linux | `启动仿真台.command` |
+| Windows | `启动仿真台.bat` |
+
+启动器做三件事：`git pull` 拉最新代码 → 构建 `dist/index.html` → 起本地服务并打开浏览器。
+更新失败（没联网、本地改过文件等）只会打印一行提示，**不会阻断启动**，照常用旧版本。
+把它拖到 Dock / 发送到桌面快捷方式，就是一个"双击即用"的入口。启动器和 `serve.py` 一样
+从自身位置推出仓库路径，所以哪怕上面那个坑没绕开、目录真的叫 `-`，双击照样能跑。
+
+**方式二：命令行**
+
+```bash
+python3 web/launch.py     # 等价于双击启动器（更新 + 构建 + 起服务）
+python3 web/serve.py      # 不检查更新，只构建 + 起服务
+```
+
+两者都会构建 `dist/index.html` 并在 <http://127.0.0.1:8000> 启动服务、自动打开浏览器。
+`launch.py` 把自己不认识的参数原样转交给 `serve.py`，所以下面这些参数两边通用
+（双击启动器时用不上参数，需要改端口就走命令行）：
 
 | 参数 | 作用 |
 | --- | --- |
@@ -36,6 +59,7 @@ python3 web/serve.py
 | `--build` | 只构建 `dist/index.html`，不起服务 |
 | `--no-browser` | 不自动打开浏览器 |
 | `--proxy` | 额外开启大模型 API 反向代理（见 §2.3） |
+| `--no-update` | 仅 `launch.py`：跳过 `git pull` |
 
 ### 1.3 为什么不直接双击 `web/index.html`
 
@@ -105,6 +129,46 @@ print(r.summary())
 
 ---
 
+### 1.7 代码更新：哪一步自动、哪一步要手动
+
+| 环节 | 会不会自动 | 说明 |
+| --- | --- | --- |
+| GitHub 上的代码 | **自动** | 每轮迭代结束都会推到 `claude/ac-control-algorithm-simulation-zivkl0`，而它就是本仓库的默认分支——`git clone` 默认检出它、`git pull` 默认也跟它，所以远端总是最新的 |
+| 本地克隆 | **不自动** | git 不会自己拉代码。你的本地副本停在上次 `git pull` 的那一刻，直到你（或启动器）去拉 |
+| 浏览器里看到的页面 | 拉完即最新 | `serve.py` 对页面发 `Cache-Control: no-store`，刷新一下就是新版本，不用清缓存 |
+
+所以"自动更新"这件事，落点在**启动的那一刻**：
+
+```bash
+# 三选一，效果相同
+双击 启动仿真台.command / 启动仿真台.bat   # 每次启动自动 pull，最省事
+python3 web/launch.py                      # 同上，命令行版
+git pull && python3 web/serve.py           # 手动版
+```
+
+启动器会把这次拉到的提交打印出来，一眼看到更新了什么：
+
+```
+· 检查更新（origin/claude/ac-control-algorithm-simulation-zivkl0）…
+· 已更新到最新版本，本次带来：
+    247a417 报告下载接入 Artifact 的 downloads 能力
+    7302d68 分析报告支持导出 PDF / Markdown / HTML
+```
+
+几点需要知道：
+
+- **更新失败不阻断启动**。没联网、远端不可达、本地有冲突，都只打印 git 的原话然后照常用旧
+  版本起服务——不会出现"因为拉不到代码所以用不了"的情况。
+- **本地改过仓库里的文件会挡住更新**。启动器用的是 `git pull --ff-only`（只快进、不自动合并，
+  免得在你机器上留下冲突残骸）。想保留改动就先 `git stash`，不要了就 `git checkout -- <文件>`。
+  自己的实验脚本建议放到仓库目录**之外**，避免每次都被挡。
+- **不想每次都联网检查**：`python3 web/launch.py --no-update`，或者直接 `python3 web/serve.py`。
+- 想看完整历史：`git log --oneline -20`；想回到某个旧版本：`git checkout <提交号>`（再 `git switch -` 回来）。
+- 若以后默认分支改成了 `main`，本地需要切一次：`git fetch origin && git checkout main`，之后
+  `git pull` 照旧。
+
+---
+
 ## 二、部署到服务器
 
 ### 2.1 纯静态托管（绝大多数情况选这个）
@@ -128,7 +192,7 @@ server {
 
     gzip on;
     gzip_types text/html;
-    gzip_min_length 1024;          # 136 KB 的页面可压到约 30 KB
+    gzip_min_length 1024;          # 160 KB 的页面可压到约 30 KB
 }
 ```
 
@@ -259,4 +323,8 @@ rsync -a dist/ user@server:/var/www/ac-sim/     # 或你惯用的发布方式
 | 批量实验时页面像卡住 | 正常：跑实验期间主循环会暂停，进度条与剩余时间在助手卡片里；可点「停止实验」 |
 | 换了台机器，方案记录没了 | localStorage 按浏览器+站点隔离，不会跟着账号走。用「复制 CSV」导出保存 |
 | 生成报告超时 | 反代默认 300s；若用 nginx 记得把 `proxy_read_timeout` 调大，默认 60s 不够 |
+| 双击 `启动仿真台.command` 弹「无法验证开发者」 | 只有从网页下载 zip 才会被 Gatekeeper 隔离，`git clone` 下来的不会。右键 →「打开」→「打开」放行一次即可，或 `xattr -d com.apple.quarantine 启动仿真台.command` |
+| 双击 `.command` 提示 `permission denied` | 执行位丢了（下载 zip 常见）：`chmod +x 启动仿真台.command` |
+| Windows 启动器报 `Python 3.8+ not found` | 装 Python 3 时没勾「Add python.exe to PATH」。重装勾上，或在仓库目录里用完整路径跑 `web\launch.py` |
+| 启动器说「更新失败」 | 见 §1.7：没联网或本地改过文件。它只是提示，仿真台照常能用 |
 | 除湿量看起来偏高 | 检查计划里的预热时长。室内湿平衡时间常数约 25 h，预热不足 24 h 会显著高估除湿量（详见 `validation-report.md` 3b 节），助手默认预热 24 h 并对不足的情况告警 |

@@ -23,6 +23,8 @@
 | [`sim/`](sim/) | Python 仿真核心（标准库实现，无第三方依赖） |
 | [`web/index.html`](web/index.html) | 交互式可视化仿真台（浏览器内实时仿真、参数手调、动态曲线） |
 | [`web/serve.py`](web/serve.py) | 构建独立 HTML + 本地服务 + 可选的大模型 API 反向代理（零依赖） |
+| [`web/launch.py`](web/launch.py) | 双击启动器的实际逻辑：`git pull` 拉最新代码 → 构建 → 起服务（更新失败不阻断） |
+| `启动仿真台.command` / `.bat` | macOS / Windows 双击入口，日常使用不用敲命令 |
 | [`docs/deploy.md`](docs/deploy.md) | 本地使用与服务器部署指南（含 CORS/API Key 的两种处理方式） |
 | [`eval/`](eval/) | 智能助手 LLM 解析路径评测：真实提示词 → 模型 → 校验 → 执行，七维打分 + 反向对照 |
 
@@ -32,12 +34,18 @@
 # 仓库名是单个连字符，克隆时请指定目录名（否则 cd - 会被 shell 当成"回到上一个目录"）
 git clone https://github.com/yhai3596/-.git hvac-sim && cd hvac-sim
 
-python3 web/serve.py             # 构建并在 http://127.0.0.1:8000 打开交互式仿真台
+python3 web/launch.py            # 拉最新代码 + 构建 + 在 http://127.0.0.1:8000 打开仿真台
+python3 web/serve.py             # 同上但不检查更新
 python3 -m sim.test_sim          # 单元测试（17 项）
 python3 -m sim.run_validation    # 运行 V0~V10 验证场景，重新生成数据表
 ```
 
-零第三方依赖：前端是 136 KB 单 HTML（无 CDN、无外链），仿真核心是纯标准库 Python。
+日常使用不必敲命令：**双击 `启动仿真台.command`（macOS/Linux）或 `启动仿真台.bat`（Windows）**
+即可，它每次启动都会先 `git pull` 拉最新代码再打开仿真台；拉不到（没联网、本地改过文件）只提示
+一行，照常用本地版本。GitHub 上的代码每轮迭代后自动更新，本地则需要这一步——详见
+[`docs/deploy.md`](docs/deploy.md) §1.7。
+
+零第三方依赖：前端是 160 KB 单 HTML（无 CDN、无外链），仿真核心是纯标准库 Python。
 本地使用、局域网共享、服务器部署与大模型 API 反代见 [`docs/deploy.md`](docs/deploy.md)。
 
 自定义实验：
