@@ -1,0 +1,708 @@
+{
+ "model": "offline",
+ "rows": [
+  {
+   "id": "multi-dim",
+   "text": "对比自动风和二档风在不同热负荷，湿度负荷以及室内设定温度条件下，以及不同地区的影响",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 18,
+   "plan": {
+    "arms": "自动风{fanCtrl=auto} 两档风·2档{fanCtrl=two,twoStage=2}",
+    "conds": "基线{} 高负荷·满足度70%{sat=70} 低负荷·满足度130%{sat=130} 高湿·新风200{vent=200} 高湿·产湿1.5{mgain=1.5} 设定23℃{tset=23} 设定26℃{tset=26} 迈阿密{loc=miami} 弗雷斯诺{loc=fresno}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：热负荷未给数值，取满足度 70%/130%",
+     "模型说明：湿度负荷未给数值，取新风 200 与产湿 1.5 各一档",
+     "模型说明：设定温度取 23/26℃",
+     "模型说明：地区取迈阿密（极湿）与弗雷斯诺（干热）",
+     "模型说明：共 18 个方案"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 18,
+    "t2": 31.8,
+    "kwh": 46.96172099149454
+   }
+  },
+  {
+   "id": "fan-3way",
+   "text": "风量那三种模式——固定、两档、自动风，哪个达温最快",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 3,
+   "plan": {
+    "arms": "固定100%{fanCtrl=fixed} 两档风·1档{fanCtrl=two,twoStage=1} 自动风{fanCtrl=auto}",
+    "conds": "基线{}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：两档风取 1 档（70%）：2 档与固定 100% 在本模型中等价，排成两臂会得到重合曲线"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 3,
+    "t2": 13.555555555555555,
+    "kwh": 46.70249827678303
+   }
+  },
+  {
+   "id": "fan-degenerate",
+   "text": "两档风的二档是不是多余的？固定 100% 跟两档风 PK 一下",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "固定100%{fanCtrl=fixed} 两档风·1档{fanCtrl=two,twoStage=1}",
+    "conds": "基线{}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：用户问二档是否多余；二档=100% 与固定 100% 等价，故对比取 1 档（70%）"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 13.555555555555555,
+    "kwh": 46.70249827678303
+   }
+  },
+  {
+   "id": "algo-reverse",
+   "text": "C算法跟B比一下，B 的目标 Tes 打 12",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "B 固定目标 Tes12{algo=B,tgtb=12} C V1.44 自学习{algo=C}",
+    "conds": "基线{}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：制冷工况，tgtb=12 作为蒸发温度目标 Tes"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 15.2,
+    "kwh": 36.67067974160308
+   }
+  },
+  {
+   "id": "algo-inverter",
+   "text": "定频机和变频机各跑一版",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "A 定频{algo=A} C 变频自学习{algo=C}",
+    "conds": "基线{}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：「变频机」未指明用固定目标 B 还是自学习 C，按 C（V1.44）处理"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 10.333333333333334,
+    "kwh": 54.55386557011125
+   }
+  },
+  {
+   "id": "tcs-heating",
+   "text": "算法B的Tcs目标定46℃和50℃，再拉上C的自学习一起比，纽约冬天",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 3,
+   "plan": {
+    "arms": "B Tcs46{algo=B,tgtb=46} B Tcs50{algo=B,tgtb=50} C 自学习{algo=C}",
+    "conds": "基线{}",
+    "base": "loc=new_york,scen=winter_typical",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：制热工况，tgtb 为冷凝温度 Tcs，46/50 均在 38~52 内",
+     "模型说明：未指明极端日，按典型冬日"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 3,
+    "t2": 35,
+    "kwh": 111.61832332489533
+   }
+  },
+  {
+   "id": "aux-enum",
+   "text": "辅热3kw跟5kw哪个更值？波士顿冬设计日跑",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "辅热3kW{aux=3} 辅热5kW{aux=5}",
+    "conds": "基线{}",
+    "base": "loc=boston,scen=winter_design",
+    "days": 3,
+    "warm": 24,
+    "notes": []
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": null,
+    "kwh": 133.75234734778954
+   }
+  },
+  {
+   "id": "aux-onoff",
+   "text": "纽约冬天，想知道加辅热和不加辅热差在哪",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "加辅热8kW{aux=8} 不加辅热{aux=0}",
+    "conds": "基线{}",
+    "base": "loc=new_york,scen=winter_typical",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：加辅热按默认 8kW"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 34.71428571428571,
+    "kwh": 111.69442831355346
+   }
+  },
+  {
+   "id": "aux-off-premise",
+   "text": "winter design day，NY，UA大一档小一档、渗透0.5和1.0ACH，就用现在的C算法，别加辅热",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 5,
+   "plan": {
+    "arms": "默认配置{}",
+    "conds": "基线{} UA小一档 250{ua=250} UA大一档 450{ua=450} 渗透0.5ACH{ach=0.5} 渗透1.0ACH{ach=1}",
+    "base": "scen=winter_design,loc=new_york,algo=C,aux=0",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：用户未点名对比对象，只做条件扫描",
+     "模型说明：「UA 大一档小一档」是量词，按 UA 450/250 两档，不是风量模式",
+     "模型说明：「别加辅热」按 aux=0 写入共同设定"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 5,
+    "t2": null,
+    "kwh": 86.88790682423682
+   }
+  },
+  {
+   "id": "db-enum",
+   "text": "回差1度跟3度对比一下",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "回差1°F{db=1} 回差3°F{db=3}",
+    "conds": "基线{}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": []
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 13.555555555555555,
+    "kwh": 46.70249827678303
+   }
+  },
+  {
+   "id": "bias-sign",
+   "text": "能力测量偏差 -10% 0 +10% 三档扫一下",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 3,
+   "plan": {
+    "arms": "偏差-10%{bias=-10} 无偏差{bias=0} 偏差+10%{bias=10}",
+    "conds": "基线{}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": []
+   },
+   "exec": {
+    "ok": true,
+    "n": 3,
+    "t2": 13.222222222222223,
+    "kwh": 46.792245415500126
+   }
+  },
+  {
+   "id": "fmax-enum",
+   "text": "变频上限压到50Hz跟放到70Hz对比制热，波士顿冬设计日辅热固定3kW",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "最高50Hz{fmax=50} 最高70Hz{fmax=70}",
+    "conds": "基线{}",
+    "base": "loc=boston,scen=winter_design,aux=3",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：辅热按用户要求固定 3kW 写入共同设定"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": null,
+    "kwh": 135.44655967344065
+   }
+  },
+  {
+   "id": "quantifier-trap",
+   "text": "设定 24℃ 和 26℃ 两版对比，回差 2°F 带一档，停机风机常开也带一档",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 6,
+   "plan": {
+    "arms": "设定24℃{tset=24} 设定26℃{tset=26}",
+    "conds": "基线{} 回差2°F{db=2} 停机风机常开{fan=on}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：「带一档」是量词，指各追加一个条件档，不是内机风量模式"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 6,
+    "t2": 13.777777777777777,
+    "kwh": 47.57749830607495
+   }
+  },
+  {
+   "id": "ta-out-of-range",
+   "text": "V1.44 的 TA 我想扫 6/8/10/12 四档；条件上再看看保温 poor/good 和满足度 80%、120%",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 10,
+   "plan": {
+    "arms": "TA 10min{ta=10} TA 12min{ta=12}",
+    "conds": "基线{} 保温差{ins=poor} 保温好{ins=good} 满足度80%{sat=80} 满足度120%{sat=120}",
+    "base": "algo=C",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：TA 6 与 8 低于平台下限 10min，已并入 10min，四档实际只剩 10/12 两档",
+     "模型说明：保温与满足度按用户所说作为条件维度"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 10,
+    "t2": 13,
+    "kwh": 46.96001402906894
+   }
+  },
+  {
+   "id": "decay",
+   "text": "冬季典型日，低温下能力衰减20%和40%两种情况分别跑一下",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "能力衰减20%{sat=80} 能力衰减40%{sat=60}",
+    "conds": "基线{}",
+    "base": "scen=winter_typical",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：平台没有直接的能力衰减变量，用负荷满足度表达：衰减 20%/40% 对应 sat 80%/60%"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 17,
+    "kwh": 71.48867357334416
+   }
+  },
+  {
+   "id": "metric-word",
+   "text": "就现在这套参数不用改 迈阿密 奥兰多 休斯顿 三个地方各跑一遍 我想看看湿度到底能压到多少",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 3,
+   "plan": {
+    "arms": "迈阿密{loc=miami} 奥兰多{loc=orlando} 休斯顿{loc=houston}",
+    "conds": "基线{}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：「湿度」是用户要看的输出指标，不作为条件维度改动",
+     "模型说明：其余参数按用户要求保持默认"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 3,
+    "t2": 13.88888888888889,
+    "kwh": 43.02018171527885
+   }
+  },
+  {
+   "id": "warmup-explicit",
+   "text": "客户老反馈达温慢，天数3天 预热2小时",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 1,
+   "plan": {
+    "arms": "默认配置{}",
+    "conds": "基线{}",
+    "base": "",
+    "days": 3,
+    "warm": 2,
+    "notes": [
+     "模型说明：用户未点名要对比什么，当前只有 1 个方案、没有对照组，建议补充对比对象",
+     "模型说明：预热按用户所说取 2 小时；这低于室内湿平衡时间常数，除湿量会被高估"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 1,
+    "t2": 13.555555555555555,
+    "kwh": 46.70249827678303
+   }
+  },
+  {
+   "id": "add-cue",
+   "text": "顺便把保温差的房子也来一版",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "默认配置{}",
+    "conds": "基线{} 保温差{ins=poor}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：「顺便…也来一版」是追加一档，作为条件档，基线保持默认保温"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 13.555555555555555,
+    "kwh": 46.70249827678303
+   }
+  },
+  {
+   "id": "english-enum",
+   "text": "两档风 vs auto风 vs 一直100%，仨方案，房子按medium，迈阿密",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 3,
+   "plan": {
+    "arms": "两档风·1档{fanCtrl=two,twoStage=1} 自动风{fanCtrl=auto} 固定100%{fanCtrl=fixed}",
+    "conds": "基线{}",
+    "base": "loc=miami,ins=medium",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：「一直100%」即 fanCtrl=fixed",
+     "模型说明：两档风取 1 档，避免与固定 100% 物理等价"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 3,
+    "t2": 16.5,
+    "kwh": 33.900911910169704
+   }
+  },
+  {
+   "id": "keyname",
+   "text": "房间 qint 拉到1500W 的情况也带上",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "默认配置{}",
+    "conds": "基线{} 内扰1500W{qint=1500}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：「也带上」是追加一档，作为条件档"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 13.555555555555555,
+    "kwh": 46.70249827678303
+   }
+  },
+  {
+   "id": "city-alias",
+   "text": "同样 3T 的机器装 LA 和休斯顿差多少",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "洛杉矶{loc=los_angeles} 休斯顿{loc=houston}",
+    "conds": "基线{}",
+    "base": "tons=3",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：LA 即洛杉矶 los_angeles"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 13.875,
+    "kwh": 19.611785353027035
+   }
+  },
+  {
+   "id": "colloquial-cfm",
+   "text": "客户投诉最多的还是达温慢，风量大一点小一点各跑一版",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "小风量350{cfm=350} 大风量450{cfm=450}",
+    "conds": "基线{}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：「风量大一点小一点」按基准风量 cfm 350/450 两档（默认 400）"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 14.142857142857142,
+    "kwh": 44.54911653424353
+   }
+  },
+  {
+   "id": "weather-contrast",
+   "text": "分设计日和普通热天两种天气",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 2,
+   "plan": {
+    "arms": "默认配置{}",
+    "conds": "基线{} 夏季设计日{scen=summer_design}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：基线即典型夏日 summer_typical（默认），设计日作为对照条件档"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 2,
+    "t2": 13.555555555555555,
+    "kwh": 46.70249827678303
+   }
+  },
+  {
+   "id": "pre-switch",
+   "text": "预学习那功能到底有没有用？开和不开比一比，不同季节、负荷轻重、房子漏不漏风都覆盖到",
+   "schema": true,
+   "keysOk": true,
+   "rangeOk": true,
+   "oneVar": true,
+   "semantic": true,
+   "sizeOk": true,
+   "physicsOk": true,
+   "issues": [],
+   "runs": 12,
+   "plan": {
+    "arms": "开预学习{pre=true} 关预学习{pre=false}",
+    "conds": "基线{} 冬季典型日{scen=winter_typical} 高负荷·满足度70%{sat=70} 低负荷·满足度130%{sat=130} 漏风 ACH1.0{ach=1} 气密 ACH0.35{ach=0.35}",
+    "base": "",
+    "days": 3,
+    "warm": 24,
+    "notes": [
+     "模型说明：季节取夏（基线，默认）与冬两档",
+     "模型说明：负荷轻重用满足度 70/130",
+     "模型说明：漏不漏风用 ACH 1.0/0.35"
+    ]
+   },
+   "exec": {
+    "ok": true,
+    "n": 12,
+    "t2": 13.555555555555555,
+    "kwh": 46.70249827678303
+   }
+  }
+ ]
+}

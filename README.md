@@ -24,6 +24,7 @@
 | [`web/index.html`](web/index.html) | 交互式可视化仿真台（浏览器内实时仿真、参数手调、动态曲线） |
 | [`web/serve.py`](web/serve.py) | 构建独立 HTML + 本地服务 + 可选的大模型 API 反向代理（零依赖） |
 | [`docs/deploy.md`](docs/deploy.md) | 本地使用与服务器部署指南（含 CORS/API Key 的两种处理方式） |
+| [`eval/`](eval/) | 智能助手 LLM 解析路径评测：真实提示词 → 模型 → 校验 → 执行，七维打分 + 反向对照 |
 
 ## 快速开始
 

@@ -2010,12 +2010,6 @@ function ruleParse(text){
       warnings.push("未识别到明确的对比对象，已按默认的三种风量模式对比——请在下方计划中确认或修改");
     }
   }
-  const hasFixed=compare.some(a=>a.set.fanCtrl==="fixed");
-  const two2=compare.find(a=>a.set.fanCtrl==="two"&&a.set.twoStage===2);
-  if(hasFixed&&two2&&!compare.some(a=>a.set.twoStage===1)){
-    two2.set.twoStage=1;two2.name="两档风·1档";
-    warnings.push("固定100% 与两档风 2 档在本模型中等价（都是 100% 风量），已把两档风臂改为 1 档（70%）以形成有效对比");
-  }
   const ref={...P0,...base};
   const seen=new Set();
   const sameAsBase=[];
@@ -2113,6 +2107,25 @@ function validatePlan(plan){
   if(flat.length&&!compare.length){conditions=conditions.concat(flat);compare=[{name:"默认配置",set:{}}];}
   if(!compare.length)compare=[{name:"默认配置",set:{}}];
   if(!conditions.length)conditions=[{name:"基线",set:{}}];
+  // 物理有效性：两个臂若跑出来必然重合，这个对比就是假的。
+  // 本模型里 fanCtrl=fixed 与 two+twoStage=2 都是 100% 风量，是唯一一处这样的等价。
+  const airSig=st=>{
+    const fc=st.fanCtrl!==undefined?st.fanCtrl:base.fanCtrl!==undefined?base.fanCtrl:P0.fanCtrl;
+    const ts=st.twoStage!==undefined?st.twoStage:base.twoStage!==undefined?base.twoStage:P0.twoStage;
+    return (fc==="two"&&ts===2)?"fixed":fc;
+  };
+  if(compare.length>1){
+    const two2=compare.find(a=>a.set.fanCtrl==="two"&&(a.set.twoStage===2||a.set.twoStage===undefined));
+    const fixedArm=compare.find(a=>airSig(a.set)==="fixed"&&a!==two2);
+    if(two2&&fixedArm){
+      two2.set.twoStage=1;two2.name="两档风·1档";
+      warnings.push("固定100% 与两档风 2 档在本模型中等价（都是 100% 风量），"+
+        "排成两个臂会跑出两条重合曲线；已把两档风臂改为 1 档（70%）以形成有效对比");
+    }
+    const sigs=compare.map(a=>JSON.stringify(a.set));
+    const dup=sigs.filter((x,i)=>sigs.indexOf(x)!==i);
+    if(dup.length)warnings.push("有 "+dup.length+" 个对比臂的参数完全相同，跑出来必然重合——请检查计划");
+  }
   // 单变量审计：对比臂之间只应差一个变量；每个条件档也只应改一个变量
   const roots=a=>new Set(a.flatMap(x=>Object.keys(x.set).map(rootKey)));
   if(compare.length>1){
@@ -2135,11 +2148,14 @@ function validatePlan(plan){
     Object.assign(merged,a.set);
     variants.push({name:nm.slice(0,32),set:merged,arm:a.name,cond:c.name});
   }
+  const notes=(Array.isArray(plan.notes)?plan.notes:[]).map(x=>String(x).slice(0,200)).slice(0,12);
   return {days,warmup_h:warm,base,compare,conditions,variants,
-    focus:String(plan.focus||"").slice(0,500),warnings,guessed:plan._guessed||[]};
+    focus:String(plan.focus||"").slice(0,500),warnings,
+    guessed:(plan._guessed||[]).concat(notes.map(n=>"模型说明："+n))};
 }
 function planForJson(vp){
   return {days:vp.days,warmup_h:vp.warmup_h,base:vp.base,
+    notes:vp.guessed.filter(g=>g.startsWith("模型说明：")).map(g=>g.slice(5)),
     compare:vp.compare.map(a=>({name:a.name,set:a.set})),
     conditions:vp.conditions.map(c=>({name:c.name,set:c.set})),
     focus:vp.focus};
@@ -2267,6 +2283,8 @@ function planKv(o){
 function renderPlan(vp,src){
   const st=planStats(vp);
   let html="<div class='note'>计划来源："+esc(src)+"　·　共同设定："+esc(planKv(vp.base))+"</div>";
+  if(/内置规则/.test(src))html+="<div class='note'>⚠ 当前走的是无 API 时的降级路径：内置规则只覆盖常见说法，"
+    +"复杂或口语化的需求建议在「API 配置」里接入大模型，由模型按平台接口契约编译计划。</div>";
   html+="<div class='plan-stat'><span><b>"+st.runs+"</b> 个方案</span>"
     +"<span>每个：预热 "+vp.warmup_h+" h + 测量 "+vp.days+" 天</span>"
     +"<span>合计仿真 <b>"+st.simH.toFixed(0)+"</b> 机时</span>"
@@ -2369,29 +2387,57 @@ function renderExpSummary(recs,vp){
 /* ---------- 解析提示词 ---------- */
 function buildParsePrompt(text){
   const locMap=Object.entries(LOCATIONS).map(([k,v])=>v.name+"="+k).join("，");
-  const sys="你是空调控制算法仿真平台的实验计划编译器：把用户的自然语言测试需求编译成严格 JSON 实验计划。\n"+
-    "可设变量（键名、含义、取值范围、默认值）：\n"+varCatalog()+"\nloc 取值对照："+locMap+"\n\n"+
-    "输出 JSON 结构：\n"+
-    '{"days":每方案测量天数(默认3，0.25~10),"warmup_h":预热小时(默认24，取 24 的整数倍；'+
-    '室内湿平衡时间常数约 25h，预热不足会高估除湿量),'+
-    '"base":{所有方案共同的设定，只写与默认值不同的键},'+
-    '"compare":[{"name":"臂名","set":{相对 base 改动的键值}}],'+
-    '"conditions":[{"name":"基线","set":{}},{"name":"条件档名","set":{单个变量的改动}}],'+
-    '"focus":"用户关注的对比点（原文提炼）"}\n\n'+
-    "语义：实际运行的方案 = compare（对比臂）× conditions（条件档）的组合，共 |compare|×|conditions| 个。\n"+
-    "规则：\n"+
-    "1. 只输出 JSON 本体，不要解释文字，不要 Markdown 代码围栏。\n"+
-    "2. 用户未提到的变量一律不要写（自动采用默认值）。\n"+
-    "3. compare = 用户点名要相互对比的对象（如自动风 vs 二档风），**臂与臂之间只能相差一个变量**"+
-    "（fanCtrl 与 twoStage、algo 与其参数属同一选择，可同时给）。用户没点名对比对象时 compare 只放一个 {\"name\":\"默认配置\",\"set\":{}}。\n"+
-    "4. conditions = 用户提到的\"在不同 X 条件下\"的每个 X，**逐一调节**：第一个必须是 {\"name\":\"基线\",\"set\":{}}，"+
-    "其后每档只改一个变量；不要把不同 X 交叉相乘（如 热负荷×湿度 不要写成 4 档，各自 1~2 档即可）。\n"+
-    "5. 用户说了\"不同热负荷/湿度负荷/设定温度/地区/保温\"但没给数值时，自己选有代表性的 2 档："+
-    "热负荷用 sat（如 70% / 130%）；湿度负荷用 vent（如 200 m³/h）或 mgain（如 1.5 kg/h）；"+
-    "设定温度用 tset；地区用 loc；保温用 ins。\n"+
-    "6. 方案总数（|compare|×|conditions|）控制在 20 以内；数量多时把 days 降到 1~1.5。\n"+
-    "7. 两档风默认 twoStage=2（2档100%），用户说 1 档时才设 1。\n"+
-    "8. 制热类需求把 base.scen 设为 winter_typical（极端工况用 winter_design）；除湿/RH 指标只在制冷模式有意义。";
+  const metricList=REC_COLS.map(c=>METRIC_DEFS[c[1]][0]).join("、");
+  const sys="你是空调控制算法仿真平台的「实验计划编译器」：把用户的自然语言测试需求，编译成本平台能直接执行的 JSON 实验计划。\n"+
+    "你的输出会被程序直接解析并驱动仿真，因此必须严格符合下面的接口契约。\n\n"+
+    "== 一、可设变量（这是平台的全部可调参数，键名必须逐字使用）==\n"+varCatalog()+
+    "\nloc 取值对照："+locMap+"\n\n"+
+    "== 二、输出 JSON 结构 ==\n"+
+    "{\n"+
+    '  "days": 每方案测量天数, number, 0.25~10, 默认 3\n'+
+    '  "warmup_h": 预热小时, number, 0~96, 默认 24（室内湿平衡时间常数约 25h，预热不足会高估除湿量；\n'+
+    '              用户明确说了预热多久就用用户的值，不要改）\n'+
+    '  "base": { 所有方案共同的设定，只写与默认值不同的键 }\n'+
+    '  "compare": [ { "name": "臂名", "set": { 相对 base 的改动 } }, ... ]\n'+
+    '  "conditions": [ { "name": "基线", "set": {} }, { "name": "条件档名", "set": { 单个变量 } }, ... ]\n'+
+    '  "focus": "用户关注的对比点（从原文提炼）"\n'+
+    '  "notes": [ "你做的每一处推断、替用户选的取值、以及你不确定的地方，一条一句中文" ]\n'+
+    "}\n"+
+    "实际执行的方案 = compare（对比臂）× conditions（条件档），共 |compare|×|conditions| 个。\n\n"+
+    "== 三、硬性规则 ==\n"+
+    "1. 只输出 JSON 本体：不要解释文字，不要 Markdown 代码围栏，不要注释。\n"+
+    "2. 只能使用第一节列出的键名。用户提到的东西如果平台没有对应变量，不要编造键名——写进 notes 说明无法覆盖。\n"+
+    "3. 用户没提到的变量一律不写（平台会用默认值）。\n"+
+    "4. compare = 用户点名要相互比较的对象。**臂与臂之间只能相差一个变量**；"+
+    "fanCtrl 与 twoStage、algo 与 tgtb/ta/dz/rate 属同一物理选择，可以同时给。\n"+
+    "   用户没点名对比对象时，compare 只放一个 {\"name\":\"默认配置\",\"set\":{}}。\n"+
+    "5. conditions = 用户说的\"在不同 X 条件下\"的每个 X，逐一调节：第一个必须是 {\"name\":\"基线\",\"set\":{}}，"+
+    "其后每档相对基线**只改一个变量**。不同的 X 之间不要交叉相乘"+
+    "（热负荷×湿度不要写成 4 档，各自 1~2 档即可）。\n"+
+    "6. 方案总数控制在 20 以内；确实需要更多时把 days 降到 1~1.5，并在 notes 说明。\n"+
+    "7. 取值必须落在第一节给出的范围内。用户给的值越界时，取最接近的合法值，并在 notes 里写明原值与替换值。\n"+
+    "8. tgtb（算法 B 的固定目标）与模式相关：制冷是蒸发温度 Tes，合法 4~14；制热是冷凝温度 Tcs，合法 38~52。"+
+    "不要把制热的 Tcs 写进制冷工况，反之亦然。\n"+
+    "9. 制热类需求把 base.scen 设为 winter_typical（极端工况用 winter_design）。"+
+    "除湿量与 RH 指标只在制冷模式有物理意义。\n"+
+    "10. 物理等价陷阱：本模型里 fanCtrl=\"fixed\" 与 fanCtrl=\"two\"+twoStage=2 都是 100% 风量，"+
+    "把它们排成两个臂会跑出两条完全重合的曲线。要对比两档风的低档价值时用 twoStage=1（70%）。\n"+
+    "11. 中文里的\"档\"多数是量词（\"UA 大一档\"\"回差带一档\"\"扫三档\"），只有明确在说内机风量时才是 fanCtrl。\n"+
+    "12. 陈述性前提（\"就用 C 算法\"\"房子按 medium\"\"在达拉斯\"）写进 base，不要拿它和默认值凑成一个对比臂；"+
+    "追加语气（\"顺便把保温差的也来一版\"）写成 conditions 的增量档，不要改 base。\n\n"+
+    "== 四、平台会输出的指标（供你写 focus 时对齐用语）==\n"+metricList+"\n\n"+
+    "== 五、示例 ==\n"+
+    "用户：对比自动风和二档风在不同热负荷、湿度负荷下的除湿表现\n"+
+    '{"days":3,"warmup_h":24,"base":{},'+
+    '"compare":[{"name":"自动风","set":{"fanCtrl":"auto"}},{"name":"两档风·2档","set":{"fanCtrl":"two","twoStage":2}}],'+
+    '"conditions":[{"name":"基线","set":{}},{"name":"高负荷·满足度70%","set":{"sat":70}},'+
+    '{"name":"低负荷·满足度130%","set":{"sat":130}},{"name":"高湿·新风200","set":{"vent":200}}],'+
+    '"focus":"除湿量、RH>60% 时间","notes":["热负荷未给数值，取满足度 70%/130% 两档","湿度负荷未给数值，取新风 200 m³/h"]}\n\n'+
+    "用户：波士顿冬天，辅热 3kW 跟 5kW 哪个更值，跑 2 天\n"+
+    '{"days":2,"warmup_h":24,"base":{"loc":"boston","scen":"winter_typical"},'+
+    '"compare":[{"name":"辅热3kW","set":{"aux":3}},{"name":"辅热5kW","set":{"aux":5}}],'+
+    '"conditions":[{"name":"基线","set":{}}],'+
+    '"focus":"辅热耗电与达温","notes":["未指明极端日，按典型冬日 winter_typical"]}';
   return {sys,user:"用户实验需求：\n"+text};
 }
 
@@ -2451,7 +2497,11 @@ document.getElementById("aiParseBtn").addEventListener("click",async()=>{
     }else expStatus("API 解析失败（"+res.errs.join("；")+"），改用内置规则…",true);
   }
   if(!plan){plan=ruleParse(text);src=src||"内置规则解析";}
-  const vp=validatePlan(plan);
+  let vp=validatePlan(plan);
+  if(!vp.variants.length&&!/内置规则/.test(src)){      // 模型给了空计划 → 退回内置规则
+    vp=validatePlan(ruleParse(text));
+    src="内置规则解析（模型返回的计划为空）";
+  }
   if(!vp.variants.length){expStatus("计划中没有有效方案，请调整需求描述。",true);return;}
   showPending(vp,src);
 });

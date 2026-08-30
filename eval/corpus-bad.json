@@ -1,0 +1,133 @@
+{
+ "_comment": "LLM 解析路径评测语料。expect 是对『编译结果』的断言，与解析器实现无关：arms/conds/base 是把计划序列化成 key=value 后做正则匹配；no* 为反向断言。",
+ "cases": [
+  {
+   "id": "multi-dim",
+   "text": "对比自动风和二档风在不同热负荷，湿度负荷以及室内设定温度条件下，以及不同地区的影响",
+   "expect": {
+    "arms": [
+     "fanCtrl=auto",
+     "fanCtrl=two"
+    ],
+    "conds": [
+     "sat=",
+     "vent=|mgain=",
+     "tset=",
+     "loc="
+    ],
+    "maxRuns": 24
+   }
+  },
+  {
+   "id": "fan-3way",
+   "text": "风量那三种模式——固定、两档、自动风，哪个达温最快",
+   "expect": {
+    "arms": [
+     "fanCtrl=fixed",
+     "fanCtrl=auto"
+    ],
+    "minArms": 3
+   }
+  },
+  {
+   "id": "fan-degenerate",
+   "text": "两档风的二档是不是多余的？固定 100% 跟两档风 PK 一下",
+   "expect": {
+    "arms": [
+     "fanCtrl=fixed"
+    ],
+    "noArmsPair": [
+     "fanCtrl=fixed",
+     "twoStage=2"
+    ]
+   }
+  },
+  {
+   "id": "algo-reverse",
+   "text": "C算法跟B比一下，B 的目标 Tes 打 12",
+   "expect": {
+    "arms": [
+     "algo=B",
+     "algo=C"
+    ],
+    "any": [
+     "tgtb=12"
+    ]
+   }
+  },
+  {
+   "id": "db-enum",
+   "text": "回差1度跟3度对比一下",
+   "expect": {
+    "arms": [
+     "db=1",
+     "db=3"
+    ]
+   }
+  },
+  {
+   "id": "quantifier-trap",
+   "text": "设定 24℃ 和 26℃ 两版对比，回差 2°F 带一档，停机风机常开也带一档",
+   "expect": {
+    "arms": [
+     "tset=24",
+     "tset=26"
+    ],
+    "noBase": [
+     "fanCtrl="
+    ],
+    "any": [
+     "fan=on",
+     "db=2"
+    ]
+   }
+  },
+  {
+   "id": "metric-word",
+   "text": "就现在这套参数不用改 迈阿密 奥兰多 休斯顿 三个地方各跑一遍 我想看看湿度到底能压到多少",
+   "expect": {
+    "any": [
+     "loc=miami",
+     "loc=orlando",
+     "loc=houston"
+    ],
+    "noConds": [
+     "vent=",
+     "mgain="
+    ],
+    "maxRuns": 6
+   }
+  },
+  {
+   "id": "warmup-explicit",
+   "text": "客户老反馈达温慢，天数3天 预热2小时",
+   "expect": {
+    "days": 3,
+    "warmup": 2
+   }
+  },
+  {
+   "id": "city-alias",
+   "text": "同样 3T 的机器装 LA 和休斯顿差多少",
+   "expect": {
+    "arms": [
+     "loc=los_angeles",
+     "loc=houston"
+    ]
+   }
+  },
+  {
+   "id": "pre-switch",
+   "text": "预学习那功能到底有没有用？开和不开比一比，不同季节、负荷轻重、房子漏不漏风都覆盖到",
+   "expect": {
+    "arms": [
+     "pre=true",
+     "pre=false"
+    ],
+    "conds": [
+     "scen=winter"
+    ]
+   }
+  }
+ ]
+}
