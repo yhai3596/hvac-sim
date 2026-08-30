@@ -195,18 +195,45 @@ def test_fan_modes():
 
 
 def test_satisfaction_anchor():
-    from .scenarios import make_stack
+    from .scenarios import make_stack, design_load
+    base = design_load("miami")
     for sat in (0.7, 1.0, 1.3):
         _, house, device, th, _ = make_stack("B", "miami", tons=3.0,
                                              satisfaction=sat)
-        # 反算：缩放后设计负荷 × 满足度 = 额定能力
-        from .scenarios import design_load
-        base = design_load("miami")
+        # 满足度只缩放显热源；总设计负荷 = 缩放显热 + 原潜热，满足度仍精确成立
         scale = house.ua / 350.0
-        assert abs(base["total_w"] * scale * sat - 3 * 3517.0) / (3 * 3517.0) < 0.02
+        total = base["sensible_w"] * scale + base["latent_w"]
+        assert abs(3 * 3517.0 / total - sat) < 0.02
+        # 湿源保持物理面值
+        assert abs(house.ach - 0.6) < 1e-9
+        assert abs(house.moist_gain_kgh - 0.30) < 1e-9
     # 5 Ton 选择生效
     _, _, dev5, _, _ = make_stack("B", "miami", tons=5.0, satisfaction=1.0)
     assert abs(dev5.q_rated - 5 * 3517.0) < 1e-6
+
+
+def test_moisture_sources():
+    # 新风带入湿量与显热：湿热室外下，开新风的房间升湿更快、升温更快
+    from .climate import w_from_dew as wd
+    w_out = wd(24.0)
+    h0 = House(t_room=25, t_mass=25, w_room=0.010)
+    hv = House(t_room=25, t_mass=25, w_room=0.010, vent_m3h=250.0)
+    for _ in range(720):     # 2 小时无空调
+        h0.step(10, 33, w_out, 0, 0, 0, 0)
+        hv.step(10, 33, w_out, 0, 0, 0, 0)
+    assert hv.w_room > h0.w_room
+    assert hv.t_room > h0.t_room
+    # 产湿 kg/h 独立生效
+    hm = House(t_room=25, t_mass=25, w_room=0.010, moist_gain_kgh=1.5)
+    for _ in range(720):
+        hm.step(10, 33, w_out, 0, 0, 0, 0)
+    assert hm.w_room > h0.w_room
+    # 设计负荷含新风与产湿两路（物理单位，不做比例折算）
+    from .scenarios import design_load
+    d0 = design_load("miami")
+    dv = design_load("miami", vent_m3h=250.0, moist_gain_kgh=1.0)
+    assert dv["latent_w"] > d0["latent_w"] + 400
+    assert dv["sensible_w"] > d0["sensible_w"]
 
 
 def main():

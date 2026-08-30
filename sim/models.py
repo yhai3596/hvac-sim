@@ -68,7 +68,8 @@ class House:
     q_internal: float = 300.0    # 内扰显热 W
     area_m2: float = 160.0       # 建筑面积（湿平衡空气体积用）
     ach: float = 0.6             # 渗透换气次数 1/h
-    moist_gain_kgh: float = 0.30 # 内扰产湿 kg/h
+    vent_m3h: float = 0.0        # 机械新风量 m³/h（与渗透分开；带入显热+湿量）
+    moist_gain_kgh: float = 0.30 # 人员呼吸/生活产湿 kg/h
     moist_cap_mult: float = 15.0 # 湿容量放大（家具/织物缓冲）
     t_room: float = 26.0
     t_mass: float = 25.0
@@ -81,9 +82,14 @@ class House:
     def step(self, dt: float, t_out: float, w_out: float, q_solar: float,
              q_ac_sens: float, latent_removal_w: float, reevap_w: float) -> None:
         """q_ac_sens>0 制冷移出热量，<0 制热注入；latent_removal_w 盘管除湿功率，
-        reevap_w 盘管水分再蒸发回房间的潜热功率。"""
+        reevap_w 盘管水分再蒸发回房间的潜热功率。
+
+        湿源三路、单位各自物理：渗透（ACH×室外露点）、机械新风（m³/h×室外露点）、
+        人员/生活产湿（kg/h）。新风同时带入显热。"""
+        m_vent = self.vent_m3h / 3600.0 * RHO_AIR                  # kg/s
         gains = q_solar + self.q_internal
         dq_air = (self.ua * (t_out - self.t_room)
+                  + m_vent * CP_AIR * (t_out - self.t_room)
                   + self.h_mass * (self.t_mass - self.t_room)
                   + self.f_air * gains - q_ac_sens)
         dq_mass = self.h_mass * (self.t_room - self.t_mass) + (1.0 - self.f_air) * gains
@@ -91,7 +97,7 @@ class House:
         self.t_mass += dq_mass / self.c_mass * dt
         # 湿平衡
         m_inf = self.ach * self.area_m2 * 2.7 * RHO_AIR / 3600.0   # kg/s
-        dw = (m_inf * (w_out - self.w_room)
+        dw = ((m_inf + m_vent) * (w_out - self.w_room)
               + self.moist_gain_kgh / 3600.0
               - latent_removal_w / HFG
               + reevap_w / HFG) / (self.air_mass * self.moist_cap_mult)

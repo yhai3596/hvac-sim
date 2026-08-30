@@ -22,18 +22,26 @@ def make_algorithm(kind: str, mode: str, **kw):
 
 
 def design_load(loc_key: str, insulation: str = "medium",
-                t_set: float | None = None) -> dict:
-    """地点设计负荷估算（用于容量配比显示与预学习初值）。"""
+                t_set: float | None = None, vent_m3h: float = 0.0,
+                moist_gain_kgh: float = 0.30) -> dict:
+    """地点设计负荷估算（用于容量配比显示与预学习初值）。
+
+    显热 = 围护 + 日照 + 内扰 + 新风显热；潜热 = 渗透 + 新风（换气量×室外露点）
+    + 人员/生活产湿（kg/h）——各湿源保持物理单位，不折算成比例。"""
     loc = LOCATIONS[loc_key]
     lvl = INSULATION_LEVELS[insulation]
     t_set = t_set if t_set is not None else DEFAULT_TSET["cooling"]
-    sens = lvl["ua"] * (loc.summer_db04 - t_set) + 0.5 * loc.solar_peak_w + 300.0
+    m_vent = vent_m3h / 3600.0 * RHO_AIR
+    sens = (lvl["ua"] * (loc.summer_db04 - t_set) + 0.5 * loc.solar_peak_w + 300.0
+            + m_vent * 1006.0 * (loc.summer_db04 - t_set))
     vol = 160.0 * 2.7
     m_inf = lvl["ach"] * vol * RHO_AIR / 3600.0
     w_in = 0.0104   # 24.5℃/55%RH 左右
-    lat = max(0.0, m_inf * (w_from_dew(loc.summer_dew) - w_in) * HFG)
+    lat = (max(0.0, (m_inf + m_vent) * (w_from_dew(loc.summer_dew) - w_in) * HFG)
+           + moist_gain_kgh / 3600.0 * HFG)
     return {"sensible_w": sens, "latent_w": lat, "total_w": sens + lat,
-            "heating_w": max(0.0, lvl["ua"] * (21.1 - loc.winter_db996))}
+            "heating_w": max(0.0, (lvl["ua"] + m_vent * 1006.0)
+                             * (21.1 - loc.winter_db996))}
 
 
 TON_W = 3517.0
@@ -45,6 +53,7 @@ def make_stack(kind: str, location: str, scenario: str = "summer_design",
                cfm_per_ton: float = 400.0, fan_mode: str = "auto",
                tons: float = 3.0, q_rated: float | None = None,
                satisfaction: float | None = None,
+               vent_m3h: float = 0.0, moist_gain_kgh: float = 0.30,
                fan_ctrl: str = "fixed", two_stage: int = 2,
                auto_init: float = 0.60, auto_wait_s: float = 3000.0,
                auto_step_s: float = 600.0, auto_step: float = 0.10,
@@ -55,8 +64,9 @@ def make_stack(kind: str, location: str, scenario: str = "summer_design",
 
     tons：能力段（3 或 5 冷吨）；q_rated 显式给定时优先。
     satisfaction：负荷满足度 = 额定能力/建筑设计负荷（0.5~1.5）。给定时按当前
-    模式的设计负荷锚定，把所有负荷源（UA/ACH/日照/内扰显热/产湿）等比缩放，
-    使 满足度 精确成立；房屋参数仍决定负荷"构成"，满足度决定负荷"总量"。
+    模式的设计负荷锚定，**只缩放显热源（UA/日照/内扰显热）**；湿源（渗透 ACH、
+    新风 m³/h、产湿 kg/h）保持物理面值不缩放：
+    缩放系数 = (额定能力/满足度 − 设计潜热) / 设计显热。
     """
     loc = LOCATIONS[location]
     sp = scenario_params(loc, scenario)
@@ -66,10 +76,18 @@ def make_stack(kind: str, location: str, scenario: str = "summer_design",
     lvl = INSULATION_LEVELS[insulation]
     load_scale = 1.0
     if satisfaction is not None:
-        base = design_load(location, insulation)
-        anchor = base["total_w"] if mode == "cooling" else base["heating_w"]
-        cap = q_rated if mode == "cooling" else q_rated * 1.09
-        load_scale = cap / (satisfaction * max(anchor, 1.0))
+        base = design_load(location, insulation, vent_m3h=vent_m3h,
+                           moist_gain_kgh=moist_gain_kgh)
+        if mode == "cooling":
+            target_total = q_rated / satisfaction
+            load_scale = (target_total - base["latent_w"]) / max(base["sensible_w"], 1.0)
+        else:
+            # 制热：扣除新风显热后缩放围护部分
+            m_vent = vent_m3h / 3600.0 * RHO_AIR
+            vent_h = m_vent * 1006.0 * max(0.0, 21.1 - loc.winter_db996)
+            env_h = max(base["heating_w"] - vent_h, 1.0)
+            load_scale = ((q_rated * 1.09) / satisfaction - vent_h) / env_h
+        load_scale = max(0.1, min(10.0, load_scale))
     weather = Weather(t_mean=sp["t_mean"], t_amp=sp["t_amp"],
                       dew_point=sp["dew_point"],
                       solar_peak_w=sp["solar_peak_w"] * load_scale)
@@ -79,9 +97,10 @@ def make_stack(kind: str, location: str, scenario: str = "summer_design",
     else:
         t0, m0 = t_set - 1.5, t_set - 0.5
         w0 = w_from_dew(2.0)
-    house = House(ua=lvl["ua"] * load_scale, ach=lvl["ach"] * load_scale,
+    house = House(ua=lvl["ua"] * load_scale, ach=lvl["ach"],
+                  vent_m3h=vent_m3h,
                   q_internal=300.0 * load_scale,
-                  moist_gain_kgh=0.30 * load_scale,
+                  moist_gain_kgh=moist_gain_kgh,
                   t_room=t0, t_mass=m0, w_room=w0)
     device = Device(variable=(kind != "A"), meas_bias=meas_bias,
                     cfm_per_ton=cfm_per_ton, fan_mode=fan_mode,

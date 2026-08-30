@@ -243,6 +243,27 @@ def main() -> None:
         "自动风在循环前段低风量强除湿，长循环未达温时逐步提风量保能力——"
         "除湿与达温之间的折中由 4 个参数决定。\n")
 
+    # ---- V10 湿源变量（新风 / 产湿；不做满足度归一以展示真实增量） ----
+    add("## V10 湿源变量扫描（迈阿密夏季设计日 ×3 天，3 Ton，算法 B，Tes=7）\n")
+    add("### 10a 机械新风量（湿量=换气量×(W_out−W_in)，同时带入显热）\n")
+    rows = []
+    for vent in (0.0, 120.0, 240.0):
+        r = run_scenario("B", "miami", days=3.0, tons=3.0, vent_m3h=vent)
+        row = {"新风 m³/h": vent, **r.summary()}
+        strip(row, "算法", "初始达温 min", "压缩机到峰值 min", "达温间隔 min")
+        rows.append(row)
+    add(md_table(rows))
+    add("\n### 10b 人员/生活产湿（kg/h）\n")
+    rows = []
+    for mg in (0.3, 1.0, 2.0):
+        r = run_scenario("B", "miami", days=3.0, tons=3.0, moist_gain_kgh=mg)
+        row = {"产湿 kg/h": mg, **r.summary()}
+        strip(row, "算法", "初始达温 min", "压缩机到峰值 min", "达温间隔 min")
+        rows.append(row)
+    add(md_table(rows))
+    add("\n说明：两路湿源保持各自物理单位（新风/渗透按换气量×室外露点，产湿按 kg/h），"
+        "不折算成无物理意义的比例；本组不做满足度归一，以展示湿源增加的真实负荷与 RH 影响。\n")
+
     out = Path(__file__).resolve().parent.parent / "docs" / "validation-tables.md"
     out.write_text("\n".join(report), encoding="utf-8")
     print("\n".join(report))

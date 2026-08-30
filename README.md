@@ -8,6 +8,8 @@
 
 **v4**：方案对比新增「指标说明」（13 项指标定义/单位/解读）；「LLM 方案分析报告」——把方案记录与指标定义组装为提示词调用大模型生成对比分析，支持多 API 配置与轮询（预置 Claude/Anthropic、OpenAI、DeepSeek、智谱 GLM、Kimi、MiniMax，均可测试连通性，失败自动切换），无 API 时可一键复制完整分析提示词；示例报告见 [`docs/sample-llm-report.md`](docs/sample-llm-report.md)。注意：Artifact 预览环境拦截外部网络请求，外部 API 调用需本地打开 `web/index.html` 或自行部署。
 
+**v5**：湿源三路独立变量——人员/生活产湿（kg/h，运行中可调模拟人员活动）、渗透（ACH×室外露点）、新增机械新风量（m³/h×室外露点，同时带入显热），单位各自物理、不折算比例；满足度缩放修正为只作用显热源，湿源保持滑杆面值；新增 V10 湿源扫描验证。
+
 ## 内容导览
 
 | 位置 | 内容 |
@@ -22,8 +24,8 @@
 ## 快速开始
 
 ```bash
-python3 -m sim.test_sim          # 单元测试（14 项）
-python3 -m sim.run_validation    # 运行 V0~V8 验证场景，重新生成数据表
+python3 -m sim.test_sim          # 单元测试（17 项）
+python3 -m sim.run_validation    # 运行 V0~V10 验证场景，重新生成数据表
 ```
 
 自定义实验：

@@ -195,11 +195,16 @@ table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
       <input type="range" id="p_ua" min="150" max="650" step="10"></div>
     <div class="param"><label>渗透换气 ACH</label><span class="val"><span id="v_ach"></span></span>
       <input type="range" id="p_ach" min="0.1" max="1.5" step="0.05"></div>
+    <div class="param"><label>机械新风量</label><span class="val"><span id="v_vent"></span> m³/h</span>
+      <input type="range" id="p_vent" min="0" max="300" step="10"></div>
     <div class="param"><label>内扰显热</label><span class="val"><span id="v_qint"></span> W</span>
       <input type="range" id="p_qint" min="0" max="1500" step="50"></div>
-    <div class="param"><label>内扰产湿</label><span class="val"><span id="v_mgain"></span> kg/h</span>
-      <input type="range" id="p_mgain" min="0" max="1.2" step="0.05"></div>
+    <div class="param"><label>人员/生活产湿</label><span class="val"><span id="v_mgain"></span> kg/h</span>
+      <input type="range" id="p_mgain" min="0" max="2.5" step="0.05"></div>
     <div class="readout"><span>设计负荷 显热+潜热</span><b id="ro_load">—</b></div>
+    <div class="readout"><span>湿负荷 渗透/新风/产湿</span><b id="ro_moist">—</b></div>
+    <p class="hint">湿源三路各自物理单位：渗透与新风按 换气量×(室外−室内含湿量) 计算，产湿按 kg/h；
+      运行中拖动即可模拟人员活动/开新风导致的湿度上升。满足度只缩放显热源，湿源不参与缩放。</p>
   </div>
   <div class="panel">
     <h2>设备与负荷满足度</h2>
@@ -471,7 +476,7 @@ const HFG=2.45e6, RHO=1.2, CP=1006, TON=3517, DAY=86400, DT=10;
 const P={
   loc:"houston", scen:"summer_typical", mode:"cooling",
   tmean:30, tamp:5, dew:22.5, solar:2.2,
-  ins:"medium", ua:350, ach:0.6, qint:300, mgain:0.3,
+  ins:"medium", ua:350, ach:0.6, vent:0, qint:300, mgain:0.3,
   tons:3, qr:3*3.517, sat:100, bias:0, aux:8,
   cfm:400, fanCtrl:"fixed", twoStage:2,
   autoInit:60, autoWait:50, autoInt:10, autoStep:10, fan:"auto",
@@ -491,28 +496,38 @@ function solarGain(t){
   return P.solar*1000*Math.sin(Math.PI*(h-6.5)/13);
 }
 function designLoad(){
-  const sens=P.ua*(Math.max(2,(P.tmean+P.tamp)-P.tset))+0.5*P.solar*1000+P.qint;
+  // 湿源三路、单位各自物理：渗透(ACH×室外露点)、新风(m³/h×室外露点)、产湿(kg/h)
+  const dT=Math.max(2,(P.tmean+P.tamp)-P.tset);
+  const mVent=P.vent/3600*RHO;
+  const sens=P.ua*dT+0.5*P.solar*1000+P.qint+mVent*CP*dT;
   const mInf=P.ach*160*2.7*RHO/3600;
-  const lat=Math.max(0,mInf*(wFromDew(P.dew)-0.0104)*HFG);
-  const heat=Math.max(500,P.ua*(21.1-(P.tmean-P.tamp)));
-  return {sens,lat,total:sens+lat,heat};
+  const lat=Math.max(0,(mInf+mVent)*(wFromDew(P.dew)-0.0104)*HFG)+P.mgain/3600*HFG;
+  const heat=Math.max(500,(P.ua+mVent*CP)*(21.1-(P.tmean-P.tamp)));
+  return {sens,lat,total:sens+lat,heat,ventH:mVent*CP*Math.max(0,21.1-(P.tmean-P.tamp))};
 }
 function loadScale(){
-  // 负荷满足度锚定：把负荷源等比缩放，使 额定能力/设计负荷 = 满足度
+  // 负荷满足度锚定：只缩放显热源（UA/日照/内扰显热）；湿源保持物理面值。
+  // 缩放系数 = (额定能力/满足度 − 设计潜热) / 设计显热（制热扣新风显热）。
   const dl=designLoad();
-  const anchor=P.mode==="cooling"?dl.total:dl.heat;
-  const cap=P.mode==="cooling"?P.qr*1000:P.qr*1000*1.09;
-  return cap/((P.sat/100)*Math.max(anchor,1));
+  if(P.mode==="cooling"){
+    const target=P.qr*1000/(P.sat/100);
+    return Math.max(0.1,Math.min(10,(target-dl.lat)/Math.max(dl.sens,1)));
+  }
+  const target=P.qr*1000*1.09/(P.sat/100);
+  const envH=Math.max(dl.heat-dl.ventH,1);
+  return Math.max(0.1,Math.min(10,(target-dl.ventH)/envH));
 }
 function prelearnQ(){
   const LS=loadScale();
+  const mVent=P.vent/3600*RHO;
   if(P.mode==="cooling"){
     const solarAvg=P.solar*1000*(2/Math.PI)*13/24;
     const mInf=P.ach*160*2.7*RHO/3600;
-    const lat=Math.max(0,mInf*(wFromDew(P.dew)-0.0104)*HFG);
-    return Math.max(600,(P.ua*Math.max(1,P.tmean-P.tset)+solarAvg+P.qint+lat)*LS);
+    const lat=Math.max(0,(mInf+mVent)*(wFromDew(P.dew)-0.0104)*HFG)+P.mgain/3600*HFG;
+    const dT=Math.max(1,P.tmean-P.tset);
+    return Math.max(600,(P.ua*dT+solarAvg+P.qint)*LS+mVent*CP*dT+lat);
   }
-  return Math.max(600,P.ua*Math.max(1,P.tset-P.tmean)*0.9*LS);
+  return Math.max(600,(P.ua*LS+mVent*CP)*Math.max(1,P.tset-P.tmean)*0.9);
 }
 
 /* ================= V1.44 学习器 ================= */
@@ -801,14 +816,15 @@ function stepOnce(){
   const qmeas=(call&&S.defLeft<=0)?S.qDel*(1+P.bias/100):0;
   const tgt=algoTarget(t,DT,call,tout,qmeas);
   const out=deviceStep(DT,call,tout,wout,tgt);
-  // 房间（2R2C + 湿平衡；负荷源按满足度缩放）
+  // 房间（2R2C + 湿平衡）。满足度只缩放显热源；湿源（渗透/新风/产湿）保持物理面值
+  const mVent=P.vent/3600*RHO;
   const gains=qsol+P.qint*LS;
-  const dqa=P.ua*LS*(tout-S.tr)+500*(S.tm-S.tr)+0.4*gains-out.qs;
+  const dqa=P.ua*LS*(tout-S.tr)+mVent*CP*(tout-S.tr)+500*(S.tm-S.tr)+0.4*gains-out.qs;
   const dqm=500*(S.tr-S.tm)+0.6*gains;
   S.tr+=dqa/3.0e6*DT;
   S.tm+=dqm/40.0e6*DT;
-  const mInf=P.ach*LS*160*2.7*RHO/3600;
-  const dw=(mInf*(wout-S.w)+P.mgain*LS/3600-out.lat/HFG+out.reevap/HFG)/(RHO*160*2.7*15);
+  const mInf=P.ach*160*2.7*RHO/3600;
+  const dw=((mInf+mVent)*(wout-S.w)+P.mgain/3600-out.lat/HFG+out.reevap/HFG)/(RHO*160*2.7*15);
   S.w=Math.max(0.001,S.w+dw*DT);
   // 循环事件
   if(call&&!S.prevCall){S.cur={tOn:t,t2:0,t1:0,hzPeak:0,hwm:[],hz95:null};S.cycles.push(S.cur);
@@ -1159,7 +1175,10 @@ function recordRun(){
   const rec={name:"方案"+(records.length+1),
     desc:LOCATIONS[P.loc].name+" · "+({summer_design:"夏设计",summer_typical:"典夏",winter_design:"冬设计",winter_typical:"典冬"})[P.scen]
       +" · "+P.algo+(P.algo==="C"?("(TA"+P.ta+")"):"")+" · "+P.tons+"Ton·满足度"+P.sat+"% · "
-      +fanDesc+" · 回差"+P.db+"°F · 统计"+(m.days*24).toFixed(1)+"h",
+      +fanDesc
+      +(P.vent>0?" · 新风"+P.vent+"m³/h":"")
+      +(Math.abs(P.mgain-0.3)>1e-9?" · 产湿"+P.mgain+"kg/h":"")
+      +" · 回差"+P.db+"°F · 统计"+(m.days*24).toFixed(1)+"h",
     baseline:records.length===0,m:{}};
   for(const [,k] of REC_COLS)rec.m[k]=m[k]!==m[k]||m[k]===null?null:+m[k];
   records.push(rec);saveRecords();renderRecords();
@@ -1441,7 +1460,8 @@ document.getElementById("copyRepBtn").addEventListener("click",()=>{
 /* ================= UI 绑定 ================= */
 const SLIDERS=[
   ["p_tmean","v_tmean","tmean",1],["p_tamp","v_tamp","tamp",1],["p_dew","v_dew","dew",1],["p_solar","v_solar","solar",1],
-  ["p_ua","v_ua","ua",0],["p_ach","v_ach","ach",2],["p_qint","v_qint","qint",0],["p_mgain","v_mgain","mgain",2],
+  ["p_ua","v_ua","ua",0],["p_ach","v_ach","ach",2],["p_vent","v_vent","vent",0],
+  ["p_qint","v_qint","qint",0],["p_mgain","v_mgain","mgain",2],
   ["p_sat","v_sat","sat",0],["p_bias","v_bias","bias",0],["p_aux","v_aux","aux",0],
   ["p_cfm","v_cfm","cfm",0],
   ["p_ainit","v_ainit","autoInit",0],["p_await","v_await","autoWait",0],
@@ -1479,6 +1499,11 @@ function renderReadouts(){
   document.getElementById("ro_load").textContent=P.mode==="cooling"
     ?(dl.sens/1000).toFixed(1)+" + "+(dl.lat/1000).toFixed(1)+" kW"
     :"制热 "+(dl.heat/1000).toFixed(1)+" kW";
+  {const mInf=P.ach*160*2.7*RHO/3600, mVent=P.vent/3600*RHO;
+   const dwv=Math.max(0,wFromDew(P.dew)-0.0104);
+   document.getElementById("ro_moist").textContent=
+     (mInf*dwv*HFG).toFixed(0)+" / "+(mVent*dwv*HFG).toFixed(0)+" / "
+     +(P.mgain/3600*HFG).toFixed(0)+" W";}
   const LS=loadScale();
   const anchor=P.mode==="cooling"?dl.total:dl.heat;
   document.getElementById("ro_sizing").textContent=
