@@ -509,7 +509,8 @@ table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
     <div class="mdout" id="repOut"></div>
     <p class="hint" id="pdfHint" hidden>「导出 PDF」会打开浏览器打印对话框，在目标里选
       <b>「另存为 PDF」</b>（macOS 左下角 PDF ▾ → 存储为 PDF；Windows 选 Microsoft Print to PDF）。
-      这样出来的 PDF 中文正常、文字可选、矢量清晰，且不依赖任何外部库。</p>
+      这样出来的 PDF 中文正常、文字可选、矢量清晰，且不依赖任何外部库；在 Artifact 预览里打印
+      可能被沙箱限制，本地打开一定可用。「下载 Markdown / HTML」在 Artifact 里会先弹出保存确认。</p>
   </div>
 </main>
 </div>
@@ -1708,15 +1709,36 @@ function buildReportMd(){
     "5. 算法层严格遵守北美替代市场的信息边界：只能看到 thermo-on/off 时序、室外温度与外机自测能力。");
   return L.join("\n");
 }
-function downloadText(name,mime,text){
+// 保存文件有两条路：Artifact 查看器只认 downloads 能力（页面自己发起的下载一律被拦），
+// 本地/自部署则用标准的 blob + a[download]。两条都不可用时如实告知，不谎称已下载。
+let dlCap;                       // undefined=未探测，null=不可用，对象=可用
+async function getDownloads(){
+  if(dlCap!==undefined)return dlCap;
+  dlCap=null;
+  try{
+    if(window.claude&&typeof window.claude.use==="function")
+      dlCap=await window.claude.use("downloads");
+  }catch(e){dlCap=null;}
+  return dlCap;
+}
+const DL_MSG={declined:"你取消了保存。",rate_limited:"保存请求过于频繁，稍后再试。",
+  too_large:"文件超过 16 MiB 上限。",rejected_extension:"当前环境不接受该文件格式。",
+  extension_not_enabled:"当前环境未开放该文件格式。",bad_request:"导出内容有误，请重试。"};
+async function saveFile(name,mime,text){
+  const cap=await getDownloads();
+  if(cap){
+    try{await cap.save({filename:name,data:text});return {ok:true,via:"viewer"};}
+    catch(e){const code=(e&&e.code)||"unavailable";
+      return {ok:false,msg:DL_MSG[code]||"当前环境无法保存文件，请本地打开 dist/index.html。"};}
+  }
   try{
     const blob=new Blob([text],{type:mime+";charset=utf-8"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
     a.href=url;a.download=name;document.body.appendChild(a);a.click();
     setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
-    return true;
-  }catch(e){return false;}
+    return {ok:true,via:"blob"};
+  }catch(e){return {ok:false,msg:"当前环境无法保存文件，请本地打开 dist/index.html。"};}
 }
 function reportReady(){
   const on=records.length>0;
@@ -1730,13 +1752,11 @@ document.getElementById("pdfBtn").addEventListener("click",()=>{
   llmStatus("已打开打印对话框：在「目标 / 打印机」里选「另存为 PDF」即可保存。");
   setTimeout(()=>window.print(),60);
 });
-document.getElementById("mdBtn").addEventListener("click",()=>{
-  const ok=downloadText("空调仿真对比报告-"+fileStamp()+".md","text/markdown",buildReportMd());
-  llmStatus(ok?"已触发 Markdown 下载。若浏览器没有反应，说明当前环境禁止页面发起下载"
-    +"（Artifact 预览环境即如此）——请本地打开 dist/index.html，或用「复制报告」。"
-    :"导出失败，请用「复制报告」。",!ok);
+document.getElementById("mdBtn").addEventListener("click",async()=>{
+  const r=await saveFile("空调仿真对比报告-"+fileStamp()+".md","text/markdown",buildReportMd());
+  llmStatus(r.ok?(r.via==="viewer"?"Markdown 已保存。":"已触发 Markdown 下载。"):r.msg,!r.ok);
 });
-document.getElementById("htmlBtn").addEventListener("click",()=>{
+document.getElementById("htmlBtn").addEventListener("click",async()=>{
   const {title,html}=buildReportDoc();
   const css=document.querySelector("style").textContent;
   const doc="<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"+
@@ -1751,10 +1771,8 @@ document.getElementById("htmlBtn").addEventListener("click",()=>{
     "#printRoot h2{margin:22px 0 6px;padding-bottom:4px;border-bottom:1px solid #bbb}"+
     "#printRoot .caveat{border-left:3px solid #999;padding-left:12px;color:#444;font-size:13px}"+
     "</style></head><body><div id=\"printRoot\">"+html+"</div></body></html>";
-  const ok=downloadText("空调仿真对比报告-"+fileStamp()+".html","text/html",doc);
-  llmStatus(ok?"已触发 HTML 下载：双击打开后用浏览器打印即可另存为 PDF。若浏览器没有反应，"
-    +"说明当前环境禁止页面发起下载（Artifact 预览环境即如此）——请本地打开 dist/index.html。"
-    :"导出失败，请用「复制报告」。",!ok);
+  const r=await saveFile("空调仿真对比报告-"+fileStamp()+".html","text/html",doc);
+  llmStatus(r.ok?"HTML 已保存：打开后用浏览器打印即可另存为 PDF。":r.msg,!r.ok);
 });
 
 /* ================= 智能实验助手 ================= */
