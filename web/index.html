@@ -151,6 +151,33 @@ table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
   background:var(--chip);border-radius:8px;font-size:12.5px;color:var(--ink2)}
 .plan-stat b{color:var(--ink);font-variant-numeric:tabular-nums}
 #aiSummary table.records td{white-space:nowrap}
+/* ===== 报告导出：屏幕上隐藏，打印时只出这一份文档 ===== */
+#printRoot{display:none}
+@media print{
+  /* 强制浅色，避免深色主题打印出满页黑底 */
+  :root,:root[data-theme="dark"]{--ink:#000;--ink2:#333;--muted:#666;--grid:#ccc;--surface:#fff;--plane:#fff}
+  body{background:#fff!important;color:#000!important;font-size:10.5pt}
+  .app,header,.tooltip{display:none!important}
+  #printRoot{display:block!important;padding:0;max-width:none}
+  @page{size:A4;margin:16mm 14mm}
+  #printRoot h1{font-size:19pt;margin:0 0 2mm}
+  #printRoot h2{font-size:13pt;margin:7mm 0 2mm;padding-bottom:1mm;border-bottom:1px solid #999;
+    break-after:avoid;page-break-after:avoid}
+  #printRoot h3{font-size:11pt;margin:4mm 0 1.5mm;break-after:avoid;page-break-after:avoid}
+  #printRoot p,#printRoot li{orphans:3;widows:3}
+  #printRoot table{width:100%;border-collapse:collapse;font-size:8.5pt;margin:2mm 0;
+    break-inside:auto;font-variant-numeric:tabular-nums}
+  #printRoot th,#printRoot td{border:1px solid #bbb;padding:1.2mm 2mm;text-align:right}
+  #printRoot th{background:#f0f0f0;font-weight:600}
+  #printRoot th:first-child,#printRoot td:first-child,#printRoot td.tl,#printRoot th.tl{text-align:left}
+  #printRoot tr{break-inside:avoid;page-break-inside:avoid}
+  #printRoot thead{display:table-header-group}
+  #printRoot .meta{font-size:9pt;color:#555;margin:0 0 4mm}
+  #printRoot .lead{font-size:9.5pt;color:#333}
+  #printRoot .caveat{font-size:8.5pt;color:#444;border-left:2px solid #999;padding-left:3mm;margin:3mm 0}
+  #printRoot .pagebreak{break-before:page;page-break-before:always}
+  #printRoot code{font-family:ui-monospace,monospace;font-size:8.5pt}
+}
 #aiSummary table.records td:first-child{white-space:normal;min-width:9em}
 #aiSummary h4{font-size:12.5px;margin:10px 0 4px}
 #aiSummary ul{margin:2px 0 8px;padding-left:20px;font-size:12.5px;color:var(--ink2)}
@@ -458,6 +485,9 @@ table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
       <button class="btn small" id="promptBtn">复制分析提示词</button>
       <button class="btn small" id="cfgBtn">API 配置</button>
       <button class="btn small" id="copyRepBtn" hidden>复制报告</button>
+      <button class="btn small primary" id="pdfBtn" hidden>导出 PDF</button>
+      <button class="btn small" id="mdBtn" hidden>下载 Markdown</button>
+      <button class="btn small" id="htmlBtn" hidden>下载 HTML</button>
     </div>
     <div class="llm-status" id="llmStatus">未配置 API 时可用「复制分析提示词」把数据粘贴到任意大模型对话中分析。</div>
     <div id="cfgPanel" hidden>
@@ -477,9 +507,13 @@ table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
         外部 API 需在本地打开 web/index.html 或自行部署后使用。Key 仅存于本机浏览器 localStorage。</p>
     </div>
     <div class="mdout" id="repOut"></div>
+    <p class="hint" id="pdfHint" hidden>「导出 PDF」会打开浏览器打印对话框，在目标里选
+      <b>「另存为 PDF」</b>（macOS 左下角 PDF ▾ → 存储为 PDF；Windows 选 Microsoft Print to PDF）。
+      这样出来的 PDF 中文正常、文字可选、矢量清晰，且不依赖任何外部库。</p>
   </div>
 </main>
 </div>
+<div id="printRoot"></div>
 
 <script>
 "use strict";
@@ -1233,7 +1267,7 @@ function recordRun(){
   document.getElementById("recHint").textContent="";
   const rec=makeRecord("方案"+(records.length+1));
   rec.baseline=records.length===0;
-  records.push(rec);saveRecords();renderRecords();
+  records.push(rec);saveRecords();renderRecords();reportReady();
 }
 function renderRecords(){
   const tbl=document.getElementById("recTable");
@@ -1265,10 +1299,10 @@ document.getElementById("recTable").addEventListener("click",e=>{
   const i=+e.target.dataset.i;
   if(act==="base"){records.forEach((r,j)=>r.baseline=j===i);}
   else if(act==="del"){records.splice(i,1);if(records.length&&!records.some(r=>r.baseline))records[0].baseline=true;}
-  saveRecords();renderRecords();
+  saveRecords();renderRecords();reportReady();
 });
 document.getElementById("recBtn").addEventListener("click",recordRun);
-document.getElementById("clearRecBtn").addEventListener("click",()=>{records=[];saveRecords();renderRecords();});
+document.getElementById("clearRecBtn").addEventListener("click",()=>{records=[];lastPlan=null;saveRecords();renderRecords();reportReady();});
 document.getElementById("csvBtn").addEventListener("click",()=>{
   const head=["方案","描述","基准",...REC_COLS.map(c=>c[0])];
   const lines=[head.join(",")];
@@ -1500,11 +1534,13 @@ document.getElementById("promptBtn").addEventListener("click",()=>{
       ()=>llmStatus("请在下方文本框手动全选复制。"));
   else llmStatus("请在下方文本框手动全选复制。");
 });
-let lastReport="";
+let lastReport="",lastReportSrc="";
 function showReport(res){
   lastReport=res.txt;
+  lastReportSrc=res.cfg.name+"（"+res.cfg.model+"）";
   document.getElementById("repOut").innerHTML=mdRender(res.txt);
   document.getElementById("copyRepBtn").hidden=false;
+  reportReady();
   llmStatus("报告由 "+res.cfg.name+"（"+res.cfg.model+"）生成，耗时 "+res.secs.toFixed(1)+" s。");
 }
 document.getElementById("genBtn").addEventListener("click",async()=>{
@@ -1521,6 +1557,204 @@ document.getElementById("genBtn").addEventListener("click",async()=>{
 document.getElementById("copyRepBtn").addEventListener("click",()=>{
   if(navigator.clipboard&&navigator.clipboard.writeText)
     navigator.clipboard.writeText(lastReport).then(()=>llmStatus("报告 Markdown 已复制。"));
+});
+
+/* ================= 报告导出：PDF（打印）/ Markdown / HTML ================= */
+let lastPlan=null;          // 最近一次助手实验计划，供报告写"实验设计"一节
+function stamp(){
+  const d=new Date(),p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+}
+function fileStamp(){
+  const d=new Date(),p=n=>String(n).padStart(2,"0");
+  return ""+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes());
+}
+// 方案对比表（行=方案，列=13 项指标），Δ 相对基准
+function recordsTableHtml(){
+  if(!records.length)return "<p>（无方案记录）</p>";
+  const base=records.find(r=>r.baseline)||records[0];
+  let h="<table><thead><tr><th>方案</th>"+REC_COLS.map(c=>"<th>"+esc(c[0])+"</th>").join("")+"</tr></thead><tbody>";
+  for(const r of records){
+    h+="<tr><td><b>"+esc(r.name)+(r===base?" ★基准":"")+"</b><br><span style='font-size:7.5pt;color:#666'>"
+      +esc(r.desc)+"</span></td>";
+    for(const [,k,dec,lower] of REC_COLS){
+      const v=r.m[k],bv=base.m[k];
+      if(v==null){h+="<td>—</td>";continue;}
+      let cell=(+v).toFixed(dec);
+      if(r!==base&&bv!=null&&Math.abs(bv)>1e-9){
+        const pct=(v-bv)/Math.abs(bv)*100;
+        if(Math.abs(pct)>=1)cell+=" <span style='font-size:7.5pt'>("+(pct>0?"+":"")+pct.toFixed(0)+"%)</span>";
+      }
+      h+="<td>"+cell+"</td>";
+    }
+    h+="</tr>";
+  }
+  return h+"</tbody></table>";
+}
+function planSectionHtml(){
+  if(!lastPlan)return "";
+  const kv=o=>{const e=Object.entries(o||{});return e.length
+    ?e.map(([k,v])=>(VAR_DEFS[k]?VAR_DEFS[k][0]:k)+"="+v).join("，"):"（全部默认）";};
+  let h="<h2>实验设计</h2><p class='lead'>共 <b>"+lastPlan.variants.length+"</b> 个方案 = "
+    +lastPlan.compare.length+" 个对比臂 × "+lastPlan.conditions.length+" 个条件档；"
+    +"每方案预热 "+lastPlan.warmup_h+" h + 测量 "+lastPlan.days+" 天。"
+    +"共同设定："+esc(kv(lastPlan.base))+"</p>";
+  if(lastPlan.compare.length>1){
+    h+="<h3>对比臂（臂间只差一个变量）</h3><table><thead><tr><th>臂</th><th>相对共同设定的改动</th></tr></thead><tbody>";
+    lastPlan.compare.forEach((a,i)=>{h+="<tr><td>"+esc(a.name)+(i===0?"（基准臂）":"")+"</td><td>"+esc(kv(a.set))+"</td></tr>";});
+    h+="</tbody></table>";
+  }
+  if(lastPlan.conditions.length>1){
+    h+="<h3>条件维度（逐一调节，不做全交叉）</h3><table><thead><tr><th>条件档</th><th>相对基线的改动</th></tr></thead><tbody>";
+    lastPlan.conditions.forEach(c=>{h+="<tr><td>"+esc(c.name)+"</td><td>"+esc(kv(c.set))+"</td></tr>";});
+    h+="</tbody></table>";
+  }
+  if(lastPlan.guessed&&lastPlan.guessed.length)
+    h+="<h3>自动取值与模型说明</h3><ul>"+lastPlan.guessed.map(g=>"<li>"+esc(g)+"</li>").join("")+"</ul>";
+  if(lastPlan.warnings&&lastPlan.warnings.length)
+    h+="<h3>校验警告</h3><ul>"+lastPlan.warnings.map(g=>"<li>"+esc(g)+"</li>").join("")+"</ul>";
+  return h;
+}
+function metricsAppendixHtml(){
+  return "<h2>附录：指标定义</h2><table><thead><tr><th>指标</th><th>定义</th><th>单位</th><th>解读</th></tr></thead><tbody>"
+    +REC_COLS.map(c=>{const d=METRIC_DEFS[c[1]];
+      return "<tr><td>"+esc(d[0])+"</td><td class='tl'>"+esc(d[1])+"</td><td>"+esc(d[2])
+        +"</td><td class='tl'>"+esc(d[3])+"</td></tr>";}).join("")+"</tbody></table>";
+}
+const CAVEAT_HTML=
+  "<h2>模型边界与结论适用范围</h2><div class='caveat'>"
+  +"<p>1. 仿真为单区集总模型（2R2C 房间 + 湿平衡 + ADP/旁通因子除湿 + 显式压缩机频率），"
+  +"用于<b>方案之间的相对比较</b>；绝对值不宜直接外推到实机。</p>"
+  +"<p>2. V1.44 的 Tes/Tcs 自学习存在双稳态：达温 t2 与循环间隔的绝对值会随预热落点变化。"
+  +"本报告各方案共享同一预热时长与同一测量起始时刻，因此相对差异可信；"
+  +"若某方案的 t2 与同组其他方案相差近一倍，应考虑学习器落入了不同收敛盆。</p>"
+  +"<p>3. 室内湿平衡时间常数约 25 h。预热不足 24 h 会系统性高估除湿量（实测 0.5 h 预热比 24 h 高约 25%）。</p>"
+  +"<p>4. 地点设计工况为内置 ASHRAE 值（ANSI/ASHRAE Standard 169 / Fundamentals），发布前请对照 "
+  +"ashrae-meteo.info 或 ASHRAE 官网复核。</p>"
+  +"<p>5. 算法层严格遵守北美替代市场的信息边界：只能看到温控器 thermo-on/off 时序、室外温度与"
+  +"外机自测能力（可注入测量偏差）；室温、湿度、设定值、回差仅对温控器与房间模型可见。</p></div>";
+
+function buildReportDoc(){
+  const title="空调控制算法仿真 · 方案对比分析报告";
+  const src=lastReportSrc?("　·　报告生成："+esc(lastReportSrc)):"";
+  let h="<h1>"+title+"</h1>";
+  h+="<p class='meta'>生成时间："+stamp()+"　·　方案数："+records.length+src+"</p>";
+  h+=planSectionHtml();
+  h+="<h2>方案对比数据</h2><p class='lead'>括号内为相对基准方案的变化百分比。</p>"+recordsTableHtml();
+  const mx=document.getElementById("aiSummary");
+  if(mx&&mx.innerHTML.trim())h+="<h2>对比矩阵</h2>"+mx.innerHTML;
+  if(lastReport)h+="<div class='pagebreak'></div><h2>分析报告</h2>"+mdRender(lastReport);
+  h+="<div class='pagebreak'></div>"+metricsAppendixHtml()+CAVEAT_HTML;
+  return {title,html:h};
+}
+function buildReportMd(){
+  const kv=o=>{const e=Object.entries(o||{});return e.length
+    ?e.map(([k,v])=>(VAR_DEFS[k]?VAR_DEFS[k][0]:k)+"="+v).join("，"):"（全部默认）";};
+  const L=[];
+  L.push("# 空调控制算法仿真 · 方案对比分析报告","",
+    "生成时间："+stamp()+"　·　方案数："+records.length+(lastReportSrc?"　·　报告生成："+lastReportSrc:""),"");
+  if(lastPlan){
+    L.push("## 实验设计","",
+      "共 "+lastPlan.variants.length+" 个方案 = "+lastPlan.compare.length+" 个对比臂 × "
+      +lastPlan.conditions.length+" 个条件档；每方案预热 "+lastPlan.warmup_h+" h + 测量 "+lastPlan.days+" 天。",
+      "共同设定："+kv(lastPlan.base),"");
+    if(lastPlan.compare.length>1){
+      L.push("### 对比臂","","| 臂 | 相对共同设定的改动 |","| --- | --- |");
+      lastPlan.compare.forEach((a,i)=>L.push("| "+a.name+(i===0?"（基准臂）":"")+" | "+kv(a.set)+" |"));
+      L.push("");
+    }
+    if(lastPlan.conditions.length>1){
+      L.push("### 条件维度","","| 条件档 | 相对基线的改动 |","| --- | --- |");
+      lastPlan.conditions.forEach(c=>L.push("| "+c.name+" | "+kv(c.set)+" |"));
+      L.push("");
+    }
+    if(lastPlan.guessed&&lastPlan.guessed.length){
+      L.push("### 自动取值与模型说明","");lastPlan.guessed.forEach(g=>L.push("- "+g));L.push("");
+    }
+    if(lastPlan.warnings&&lastPlan.warnings.length){
+      L.push("### 校验警告","");lastPlan.warnings.forEach(g=>L.push("- "+g));L.push("");
+    }
+  }
+  L.push("## 方案对比数据","");
+  if(records.length){
+    const base=records.find(r=>r.baseline)||records[0];
+    L.push("| 方案 | 配置 | "+REC_COLS.map(c=>c[0]).join(" | ")+" |");
+    L.push("| --- | --- |"+REC_COLS.map(()=>" --- |").join(""));
+    for(const r of records){
+      const cells=REC_COLS.map(([,k,dec])=>{const v=r.m[k];
+        if(v==null)return "—";
+        let t=(+v).toFixed(dec);
+        const bv=base.m[k];
+        if(r!==base&&bv!=null&&Math.abs(bv)>1e-9){
+          const pct=(v-bv)/Math.abs(bv)*100;
+          if(Math.abs(pct)>=1)t+=" ("+(pct>0?"+":"")+pct.toFixed(0)+"%)";
+        }
+        return t;});
+      L.push("| "+r.name+(r===base?" ★基准":"")+" | "+r.desc+" | "+cells.join(" | ")+" |");
+    }
+    L.push("");
+  }else L.push("（无方案记录）","");
+  const mx=document.getElementById("aiSummary");
+  if(mx&&mx.innerText.trim())L.push("## 对比矩阵","","```",mx.innerText.trim(),"```","");
+  if(lastReport)L.push("## 分析报告","",lastReport,"");
+  L.push("## 附录：指标定义","","| 指标 | 定义 | 单位 | 解读 |","| --- | --- | --- | --- |");
+  REC_COLS.forEach(c=>{const d=METRIC_DEFS[c[1]];
+    L.push("| "+d[0]+" | "+d[1]+" | "+d[2]+" | "+d[3]+" |");});
+  L.push("","## 模型边界与结论适用范围","",
+    "1. 仿真为单区集总模型（2R2C 房间 + 湿平衡 + ADP/旁通因子除湿 + 显式压缩机频率），用于方案之间的相对比较；绝对值不宜直接外推到实机。",
+    "2. V1.44 的 Tes/Tcs 自学习存在双稳态：达温 t2 与循环间隔的绝对值会随预热落点变化。本报告各方案共享同一预热时长与同一测量起始时刻，因此相对差异可信。",
+    "3. 室内湿平衡时间常数约 25 h。预热不足 24 h 会系统性高估除湿量。",
+    "4. 地点设计工况为内置 ASHRAE 值，发布前请对照 ashrae-meteo.info 或 ASHRAE 官网复核。",
+    "5. 算法层严格遵守北美替代市场的信息边界：只能看到 thermo-on/off 时序、室外温度与外机自测能力。");
+  return L.join("\n");
+}
+function downloadText(name,mime,text){
+  try{
+    const blob=new Blob([text],{type:mime+";charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=name;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
+    return true;
+  }catch(e){return false;}
+}
+function reportReady(){
+  const on=records.length>0;
+  for(const id of ["pdfBtn","mdBtn","htmlBtn"])document.getElementById(id).hidden=!on;
+  document.getElementById("pdfHint").hidden=!on;
+}
+document.getElementById("pdfBtn").addEventListener("click",()=>{
+  if(!records.length){llmStatus("还没有方案记录，先跑一次实验或记录方案。",true);return;}
+  const {html}=buildReportDoc();
+  document.getElementById("printRoot").innerHTML=html;
+  llmStatus("已打开打印对话框：在「目标 / 打印机」里选「另存为 PDF」即可保存。");
+  setTimeout(()=>window.print(),60);
+});
+document.getElementById("mdBtn").addEventListener("click",()=>{
+  const ok=downloadText("空调仿真对比报告-"+fileStamp()+".md","text/markdown",buildReportMd());
+  llmStatus(ok?"已触发 Markdown 下载。若浏览器没有反应，说明当前环境禁止页面发起下载"
+    +"（Artifact 预览环境即如此）——请本地打开 dist/index.html，或用「复制报告」。"
+    :"导出失败，请用「复制报告」。",!ok);
+});
+document.getElementById("htmlBtn").addEventListener("click",()=>{
+  const {title,html}=buildReportDoc();
+  const css=document.querySelector("style").textContent;
+  const doc="<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"+
+    "<title>"+esc(title)+"</title><style>"+css+
+    "\nbody{margin:0;padding:24px;font:14px/1.65 system-ui,-apple-system,\"PingFang SC\",\"Microsoft YaHei\",sans-serif;"+
+    "background:#fff;color:#111;max-width:900px;margin:0 auto}"+
+    "#printRoot{display:block!important}"+
+    "#printRoot table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0;font-variant-numeric:tabular-nums}"+
+    "#printRoot th,#printRoot td{border:1px solid #ccc;padding:4px 7px;text-align:right}"+
+    "#printRoot th{background:#f2f2f2}"+
+    "#printRoot th:first-child,#printRoot td:first-child,#printRoot .tl{text-align:left}"+
+    "#printRoot h2{margin:22px 0 6px;padding-bottom:4px;border-bottom:1px solid #bbb}"+
+    "#printRoot .caveat{border-left:3px solid #999;padding-left:12px;color:#444;font-size:13px}"+
+    "</style></head><body><div id=\"printRoot\">"+html+"</div></body></html>";
+  const ok=downloadText("空调仿真对比报告-"+fileStamp()+".html","text/html",doc);
+  llmStatus(ok?"已触发 HTML 下载：双击打开后用浏览器打印即可另存为 PDF。若浏览器没有反应，"
+    +"说明当前环境禁止页面发起下载（Artifact 预览环境即如此）——请本地打开 dist/index.html。"
+    :"导出失败，请用「复制报告」。",!ok);
 });
 
 /* ================= 智能实验助手 ================= */
@@ -2261,6 +2495,7 @@ async function runExperiment(plan){
     records.push(...newRecs);
     saveRecords();renderRecords();
     renderExpSummary(newRecs,plan);
+    lastPlan=plan;reportReady();
     return newRecs;
   }finally{
     Object.assign(P,savedP);
@@ -2677,6 +2912,7 @@ buildKpis();
 refreshSliders();
 resetAll();
 renderRecords();
+reportReady();
 requestAnimationFrame(frame);
 window.addEventListener("resize",renderCharts);
 </script>
