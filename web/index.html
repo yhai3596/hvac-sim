@@ -424,7 +424,7 @@ table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
       <button class="btn small" id="aiCancelBtn" hidden>取消计划</button>
       <button class="btn small" id="aiStopBtn" hidden>停止实验</button>
       <button class="btn small" id="aiPromptBtn">复制解析提示词</button>
-      <span class="note">先解析出计划供确认（可直接编辑计划 JSON）再执行；多维需求按「基线组 + 逐一调节条件」组织，不做全交叉。</span>
+      <span class="note">先解析出计划供确认（可直接编辑下方计划 JSON）再执行；多维需求按「对比臂 × 条件维度」组织——臂间只差一个变量，条件逐一调节、不做全交叉。</span>
     </div>
     <div class="llm-status" id="aiStatus">解析优先走已配置的 API；无 API 时内置规则可识别常见对比与条件维度。外部大模型返回的计划 JSON 也可粘贴到输入框解析。</div>
     <div class="exp-progress" id="aiProg" hidden><div class="bar" id="aiBar"></div></div>
@@ -1564,8 +1564,6 @@ const VAR_DEFS={
 const PAIR_PARENT={twoStage:"fanCtrl",autoInit:"fanCtrl",autoWait:"fanCtrl",autoInt:"fanCtrl",autoStep:"fanCtrl",
   tgtb:"algo",ta:"algo",dz:"algo",rate:"algo",cyc:"algo",pre:"algo",ua:"ins",ach:"ins"};
 const rootKey=k=>PAIR_PARENT[k]||k;
-const CITY_NAMES={"迈阿密":"miami","休斯顿":"houston","达拉斯":"dallas","奥兰多":"orlando",
-  "波士顿":"boston","纽约":"new_york","洛杉矶":"los_angeles","弗雷斯诺":"fresno"};
 function varCatalog(){
   return Object.entries(VAR_DEFS).map(([k,d])=>{
     const def=P0[k];
@@ -1582,143 +1580,346 @@ function pickNums(t,re,lo,hi){
   return out;
 }
 // 关键词后"就近的一串数值"：支持「满足度 70% 和 130%」「Tes 7℃ 和 12℃」这类枚举写法
-const NUM_UNIT="(?:%|℃|°C|°F|度|min|分钟|小时|h|Ton|吨|匹|CFM|cfm|m³\\/h|kg\\/h|Hz|次)?";
+const NUM_UNIT="(?:%|℃|°C|°F|度|min|分钟|小时|h|Ton|吨|匹|CFM|cfm|m³\\/h|kg\\/h|Hz|kW|次)?";
+const REJECTED=[];      // 识别到但超出可设范围的数值（用于告警，避免"静默丢弃"）
 function nearNums(t,kw,lo,hi){
   const re=new RegExp(kw+"[^0-9]{0,6}((?:\\d+(?:\\.\\d+)?\\s*"+NUM_UNIT+
-    "\\s*(?:和|与|、|,|，|或|vs|VS|至|到|~|-|—)?\\s*){1,6})","gi");
-  const out=[];
+    "\\s*(?:和|与|、|,|，|或|vs|VS|至|到|~|-|—|\\/|对|比)?\\s*){1,6})","gi");
+  const out=[],bad=[];
   for(const m of String(t).matchAll(re))
     for(const n of m[1].matchAll(/\d+(?:\.\d+)?/g)){
       const v=+n[0];
-      if(v>=lo&&v<=hi&&!out.includes(v))out.push(v);
+      if(v>=lo&&v<=hi){if(!out.includes(v))out.push(v);}
+      else if(!bad.includes(v))bad.push(v);
     }
+  if(bad.length&&!out.length)REJECTED.push({kw,bad,lo,hi});
   return out;
 }
+function numsWithUnit(t,kw,unit,lo,hi){
+  const re=new RegExp(kw+"\\s*(\\d+(?:\\.\\d+)?)\\s*(?:"+unit+")","gi");
+  const out=[];
+  for(const m of String(t).matchAll(re)){
+    const v=+m[1];
+    if(v>=lo&&v<=hi&&!out.includes(v))out.push(v);
+  }
+  return out;
+}
+const tsetNums=t=>{
+  // 强关键词（设定温度/设点…）单位可省；弱动词（设到/调到/开到…）必须带温度单位，
+  // 否则会抢走「TA 调到 90」「新风开到 200」里别的变量的数字
+  const a=nearNums(t,"(?:设定温度|室内设定|设定值|温度设定|设点)",18,30);
+  const b=numsWithUnit(t,"(?:设定|设到|设成|调到|打到|开到|设)","度|℃|°C|摄氏",18,30);
+  const out=[...new Set([...a,...b])];
+  // 已确认在谈设定温度时，句中其余"NN 度"也一并收（「设到 26 度，跟 23 度比一比」）
+  if(out.length)
+    for(const v of numsWithUnit(t,"","度|℃|°C",18,30))if(!out.includes(v))out.push(v);
+  return out;
+};
 const setEqualsRef=(s,ref)=>Object.keys(s).length>0&&Object.entries(s).every(([k,v])=>ref[k]===v);
+// 地名（含中英别名与州/区域代表城市）
+const CITY_ALIAS=[["迈阿密","miami"],["Miami","miami"],["奥兰多","orlando"],["Orlando","orlando"],
+  ["休斯顿","houston"],["休斯敦","houston"],["休城","houston"],["Houston","houston"],
+  ["达拉斯","dallas"],["Dallas","dallas"],["洛杉矶","los_angeles"],["Los Angeles","los_angeles"],
+  ["LA","los_angeles"],["弗雷斯诺","fresno"],["Fresno","fresno"],
+  ["波士顿","boston"],["Boston","boston"],["纽约","new_york"],["New York","new_york"],
+  ["NYC","new_york"],["NY","new_york"],["Hou","houston"],
+  ["加州","los_angeles"],["加利福尼亚","los_angeles"],["德州","houston"],["德克萨斯","houston"],
+  ["佛州","miami"],["佛罗里达","miami"],["麻省","boston"],["马萨诸塞","boston"]];
+const CITY_NAMES=Object.fromEntries(CITY_ALIAS);        // 兼容旧引用
+function findCities(t){
+  const hits=[];
+  for(const [name,key] of CITY_ALIAS){
+    let idx;
+    if(/^[A-Za-z. ]+$/.test(name)){                     // 英文别名：词边界 + 大小写不敏感
+      const m=new RegExp("(^|[^A-Za-z])"+name.replace(/\./g,"\\.")+"($|[^A-Za-z])","i").exec(t);
+      idx=m?m.index:-1;
+    }else idx=t.indexOf(name);
+    if(idx>=0&&!hits.some(h=>h.key===key))hits.push({key,name,idx});
+  }
+  return hits.sort((a,b)=>a.idx-b.idx);
+}
+const wantsCooling=t=>/夏|制冷|热天|高温|降温|除湿|潮/.test(t);
+const wantsHeating=t=>/冬|制热|冷天|采暖|供暖|化霜|辅热|低温|制暖/.test(t);
+// 该轴关键词在句中首次出现的位置（用于判断用户最先点名的对比对象）
+function axisPos(a,t){
+  if(a.posOf)return a.posOf(t);
+  if(!a.posRe)return Infinity;
+  const m=a.posRe.exec(t);
+  return m?m.index:Infinity;
+}
 const AXES=[
-  {id:"fanCtrl",name:"内机风量模式",build:t=>{
+  {id:"fanCtrl",name:"内机风量模式",posRe:/自动风|[2二两貳贰１1一壹]\s*[档檔段]|固定\s*100|固定风|定风[档檔]|风量模式/,build:t=>{
     const L=[];
     if(/自动风|自动风量|auto\s*风/i.test(t))L.push(["自动风",{fanCtrl:"auto"}]);
     if(/[2二两貳贰２]\s*[档檔段]|双[档檔]|[2二两]\s*[档檔]风/.test(t))L.push(["两档风·2档",{fanCtrl:"two",twoStage:2}]);
-    if(/[1一壹]\s*[档檔段](?!风机)|低[档檔]/.test(t))L.push(["两档风·1档",{fanCtrl:"two",twoStage:1}]);
-    if(/固定风|定风[档檔]|固定\s*100|常风量|单风[档檔]|固定风量/.test(t))L.push(["固定100%",{fanCtrl:"fixed"}]);
+    if(/[1一壹]\s*[档檔段](?!风机)|低[档檔]|小风[档檔]/.test(t))L.push(["两档风·1档",{fanCtrl:"two",twoStage:1}]);
+    if(/固定风|定风[档檔]|固定\s*100|常风量|单风[档檔]|固定风量|固定[、，,]|固定档/.test(t))
+      L.push(["固定100%",{fanCtrl:"fixed"}]);
+    // 「风量那三种模式」「三种风量模式」「各种风量模式」：没点名具体模式也要全上
+    if(L.length<2&&/(三种|3\s*种|各种|所有|全部|几种).{0,6}(风量|风[档檔])|风量.{0,4}(那)?\s*(三种|3\s*种|几种)|风[档檔]模式.{0,4}(都|全部|各)/.test(t))
+      return [["自动风",{fanCtrl:"auto"}],["两档风·1档",{fanCtrl:"two",twoStage:1}],
+              ["固定100%",{fanCtrl:"fixed"}]];
     return L;}},
-  {id:"algo",name:"控制算法",build:t=>{
+  {id:"algo",name:"控制算法",posRe:/定频|自学习|V\s*1\.?44|固定目标|算法\s*[ABC]|负荷预测/i,build:t=>{
     const L=[];
-    if(/定频|算法\s*A|单级机/i.test(t))L.push(["A 定频基线",{algo:"A"}]);
-    if(/固定目标|算法\s*B|不学习|无自学习/i.test(t))L.push(["B 固定目标",{algo:"B"}]);
-    if(/V\s*1\.?44|自学习|算法\s*C|负荷预测/i.test(t))L.push(["C V1.44 自学习",{algo:"C"}]);
+    const letter=x=>new RegExp("算法\\s*"+x+"|\\b"+x+"\\s*算法|[跟和与对]\\s*"+x+"\\b|\\b"+x+
+      "\\s*(?:比|对比|PK|方案)","i").test(t);
+    if(/定频|单级机|单速|on\s*[-\/]?\s*off/i.test(t)||letter("A"))L.push(["A 定频基线",{algo:"A"}]);
+    if(/变频固定目标|固定目标|不学习|无自学习/i.test(t)||letter("B"))L.push(["B 固定目标",{algo:"B"}]);
+    if(/V\s*1\.?44|自学习|负荷预测/i.test(t)||letter("C"))L.push(["C V1.44 自学习",{algo:"C"}]);
+    // 只说"变频机"未点明 B/C 时按 C（V1.44）处理
+    if(!L.some(x=>x[1].algo==="C")&&/变频机|变频(?!.{0,4}固定目标)|inverter|直流变频/i.test(t)&&
+       L.some(x=>x[1].algo==="A"))L.push(["C V1.44 自学习",{algo:"C"}]);
     return L;}},
-  {id:"tons",name:"能力段",build:t=>{
+  {id:"pre",name:"预学习开关",posRe:/预学习/,build:t=>{
+    if(!/预学习/.test(t))return [];
+    return [["开预学习",{pre:true}],["关预学习",{pre:false}]];}},
+  {id:"fan",name:"停机风机策略",posRe:/停机风机|风机常开|常开风机/,build:t=>{
+    if(!/停机风机|风机常开|常开风机|停机后.{0,6}风机|风机.{0,4}常开/.test(t))return [];
+    return [["停机风机 AUTO",{fan:"auto"}],["停机风机常开",{fan:"on"}]];}},
+  {id:"aux",name:"电辅热",posRe:/辅热|辅助电热/,build:t=>{
+    const v=nearNums(t,"辅热",0,12);
+    if(v.length>=2)return v.map(x=>["辅热"+x+"kW",{aux:x}]);
+    if(/辅热|电辅热|辅助电热/.test(t))return [["辅热 8kW",{aux:8}],["无辅热 0kW",{aux:0}]];
+    return [];}},
+  {id:"tons",name:"能力段",posRe:/\d\s*(?:Ton|T\b|吨|匹)|能力段|吨位/i,build:t=>{
     const L=[];
-    if(/3\s*(Ton|吨|匹)/i.test(t))L.push(["3 Ton",{tons:3}]);
-    if(/5\s*(Ton|吨|匹)/i.test(t))L.push(["5 Ton",{tons:5}]);
+    if(/3\s*(Ton|T\b|吨|匹)/i.test(t))L.push(["3 Ton",{tons:3}]);
+    if(/5\s*(Ton|T\b|吨|匹)/i.test(t))L.push(["5 Ton",{tons:5}]);
     return L;}},
-  {id:"sat",name:"负荷满足度",build:t=>
-    nearNums(t,"满足度",50,150).map(v=>["满足度"+v+"%",{sat:v}])},
-  {id:"algoTgt",name:"固定目标 Tes/Tcs",build:t=>
+  {id:"tset",name:"室内设定温度",posRe:/设定温度|设定值|设点|设[到成]\s*\d|[调打开]到\s*\d/,build:t=>
+    tsetNums(t).map(v=>["设定"+v+"℃",{tset:v}])},
+  {id:"sat",name:"负荷满足度",posRe:/满足度|选型|裕度|一号|偏小|偏大|带不动/,build:t=>{
+    const v=nearNums(t,"满足度",50,150);
+    if(v.length>=2)return v.map(x=>["满足度"+x+"%",{sat:x}]);
+    const small=/小一号|小一[档挡级]|选小|能力偏小|偏小了|配小|带不动|撑不住|能力不足/.test(t);
+    const big=/大一号|大一[档挡级]|选大|能力偏大|偏大了|配大|能力富余/.test(t);
+    if(small&&big)return [["满足度70%（能力偏紧）",{sat:70}],["满足度130%（能力偏大）",{sat:130}]];
+    return v.map(x=>["满足度"+x+"%",{sat:x}]);}},
+  {id:"algoTgt",name:"固定目标 Tes/Tcs",posRe:/T[ec]s/i,build:t=>
     nearNums(t,"T[ec]s",4,52).map(v=>["目标"+v+"℃",{algo:"B",tgtb:v}])},
-  {id:"loc",name:"地点",build:t=>Object.keys(CITY_NAMES).filter(n=>t.includes(n))
-    .map(n=>[n,{loc:CITY_NAMES[n]}])},
-  {id:"cfm",name:"基准风量",build:t=>{
+  {id:"loc",name:"地点",posOf:t=>{const h=findCities(t);return h.length?h[0].idx:Infinity;},
+   build:t=>findCities(t).map(h=>[h.name,{loc:h.key}])},
+  {id:"cfm",name:"基准风量",posRe:/风量|CFM/i,build:t=>{
     const v=[...pickNums(t,/(\d{3})\s*(?:CFM|cfm)/g,300,460),...nearNums(t,"风量",300,460)];
-    return [...new Set(v)].map(x=>[x+" CFM/Ton",{cfm:x}]);}},
-  {id:"db",name:"温控器回差",build:t=>
-    nearNums(t,"回差",0.5,3).map(v=>["回差"+v+"°F",{db:v}])},
-  {id:"ta",name:"目标运转时间 TA",build:t=>
+    const u=[...new Set(v)];
+    if(u.length>=2)return u.map(x=>[x+" CFM/Ton",{cfm:x}]);
+    // 「风量大一点小一点」「大风量小风量」这类无数值的定性说法
+    if(/风量.{0,6}(大|高).{0,8}(小|低)|风量.{0,6}(小|低).{0,8}(大|高)|大小风量|风量大小/.test(t))
+      return [["小风量 350 CFM/Ton",{cfm:350}],["大风量 450 CFM/Ton",{cfm:450}]];
+    return u.map(x=>[x+" CFM/Ton",{cfm:x}]);}},
+  {id:"db",name:"温控器回差",posRe:/回差|温差带/,build:t=>
+    nearNums(t,"(?:回差|温差带)",0.5,3).map(v=>["回差"+v+"°F",{db:v}])},
+  {id:"dz",name:"UP/DOWN 死区",posRe:/死区|判定死区/,build:t=>
+    nearNums(t,"死区",5,40).map(v=>["死区±"+v+"%",{dz:v}])},
+  {id:"ta",name:"目标运转时间 TA",posRe:/TA/i,build:t=>
     nearNums(t,"TA",20,120).map(v=>["TA "+v+"min",{ta:v}])},
+  {id:"bias",name:"能力测量偏差",posRe:/偏差|实测能力|标称/,build:t=>{
+    const v=nearNums(t,"偏差",-15,15);
+    if(v.length>=2)return v.map(x=>["偏差"+x+"%",{bias:x}]);
+    if(/偏差|实测能力|标称.{0,6}(差|少|低)|能力.{0,4}虚标/.test(t))
+      return [["无偏差",{bias:0}],["偏差 −10%",{bias:-10}],["偏差 +10%",{bias:10}]];
+    return [];}},
+  {id:"scen",name:"季节工况",posRe:/夏|冬|季节|冷天|热天/,build:t=>{
+    if(!((wantsCooling(t)&&wantsHeating(t))||/不同季节|季节变化|各个?季节|全年|四季|两季/.test(t)))return [];
+    const design=/设计日|极端/.test(t);
+    return design
+      ?[["夏季设计日",{scen:"summer_design"}],["冬季设计日",{scen:"winter_design"}]]
+      :[["夏季典型日",{scen:"summer_typical"}],["冬季典型日",{scen:"winter_typical"}]];}},
 ];
 
 /* ---------- 条件维度库：用户说"不同 X"但没给数值时，按此表取代表档位逐一调节 ---------- */
+function locLevels(t,mode){
+  if(/潮|湿|除湿/.test(t)&&mode==="cooling")
+    return [["迈阿密 FL（极湿 1A）",{loc:"miami"}],["奥兰多 FL（湿热 2A）",{loc:"orlando"}],
+            ["弗雷斯诺 CA（干热 3B）",{loc:"fresno"}]];
+  if(mode==="heating")
+    return [["波士顿 MA（冷 5A）",{loc:"boston"}],["纽约 NY（4A）",{loc:"new_york"}]];
+  return [["迈阿密 FL（极湿 1A）",{loc:"miami"}],["弗雷斯诺 CA（干热 3B）",{loc:"fresno"}]];
+}
 const DIMS=[
   {id:"sat",name:"热负荷 / 选型裕度",
-   re:/热负荷|冷负荷|建筑负荷|负荷大小|负荷率|不同负荷|负荷条件|负荷情况|负荷变化|满足度|选型|裕度|大小机/,
-   levels:()=>[["高负荷·满足度70%",{sat:70}],["低负荷·满足度130%",{sat:130}]],
-   nums:t=>nearNums(t,"满足度",50,150).map(v=>["满足度"+v+"%",{sat:v}])},
+   re:/热负荷|冷负荷|建筑负荷|负荷大小|负荷率|不同负荷|负荷条件|负荷情况|负荷变化|负荷轻重|满足度|选型|裕度|大小机|一号|负荷大|负荷高|大负荷|重负荷|带不动|撑不住|能力.{0,3}(选小|偏小|偏大|不够|不足|富余)/,
+   levels:t2=>{
+     const t=String(t2===undefined?"":t2);return [["高负荷·满足度70%",{sat:70}],["低负荷·满足度130%",{sat:130}]];},
+   nums:t=>{
+     const v=nearNums(t,"满足度",50,150);
+     if(v.length)return v.map(x=>["满足度"+x+"%",{sat:x}]);
+     const small=/小一号|选小|能力偏小|偏小了|配小|带不动|撑不住|能力不足|负荷大|负荷高|大负荷|重负荷/.test(t);
+     const big=/大一号|选大|能力偏大|偏大了|配大|能力富余|负荷小|轻负荷/.test(t);
+     if(small&&!big)return [["高负荷·满足度70%",{sat:70}]];
+     if(big&&!small)return [["低负荷·满足度130%",{sat:130}]];
+     return [];}},
   {id:"moist",name:"湿度负荷",
-   re:/湿度负荷|湿负荷|潮湿|湿度条件|不同湿度|湿度变化|除湿负荷|新风|产湿|人员|人多|湿源/,
-   levels:m=>m==="cooling"
-     ?[["高湿·新风200m³/h",{vent:200}],["高湿·产湿1.5kg/h",{mgain:1.5}]]
-     :[["新风200m³/h",{vent:200}]],
+   re:/湿度负荷|湿负荷|潮湿|潮|湿度|除湿|新风|产湿|人员|人多|湿源|闷|回潮/,
+   levels:(m,t)=>{
+     if(m!=="cooling")return [["新风200m³/h",{vent:200}]];
+     if(/新风/.test(t)&&!/产湿|人员|人多/.test(t))
+       return [["新风120m³/h",{vent:120}],["新风240m³/h",{vent:240}]];
+     if(/产湿|人员|人多/.test(t)&&!/新风/.test(t))
+       return [["产湿1.0kg/h",{mgain:1.0}],["产湿2.0kg/h",{mgain:2.0}]];
+     return [["高湿·新风200m³/h",{vent:200}],["高湿·产湿1.5kg/h",{mgain:1.5}]];},
    nums:t=>[...nearNums(t,"新风",0,300).map(v=>["新风"+v+"m³/h",{vent:v}]),
             ...nearNums(t,"产湿",0,2.5).map(v=>["产湿"+v+"kg/h",{mgain:v}])]},
   {id:"tset",name:"室内设定温度",
-   re:/设定温度|室内设定|设定值|温度设定|设点|不同设定/,
+   re:/设定温度|室内设定|设定值|温度设定|设点|不同设定|设.{0,2}几度|温度往[低高]|温度调[高低]|[设调打开]到\s*\d+\s*(?:度|℃|°C)/,
    levels:m=>m==="cooling"?[["设定23.0℃",{tset:23}],["设定26.0℃",{tset:26}]]
                           :[["设定19.4℃",{tset:19.4}],["设定22.8℃",{tset:22.8}]],
-   nums:t=>nearNums(t,"设定",18,30).map(v=>["设定"+v+"℃",{tset:v}])},
+   nums:t=>tsetNums(t).map(v=>["设定"+v+"℃",{tset:v}])},
   {id:"loc",name:"地区气候",
-   re:/地区|地域|城市|气候|不同地方|区域|气候区|不同州/,
-   levels:m=>m==="cooling"
-     ?[["迈阿密 FL（极湿 1A）",{loc:"miami"}],["弗雷斯诺 CA（干热 3B）",{loc:"fresno"}]]
-     :[["波士顿 MA（冷 5A）",{loc:"boston"}],["纽约 NY（4A）",{loc:"new_york"}]],
-   nums:t=>Object.keys(CITY_NAMES).filter(n=>t.includes(n)).map(n=>[n,{loc:CITY_NAMES[n]}])},
+   re:/地区|地域|城市|气候|不同地方|区域|气候区|不同州|主销|各地/,
+   levels:(m,t)=>locLevels(t,m).slice(0,2),
+   nums:t=>{const h=findCities(t);return h.length>=1?h.map(x=>[x.name,{loc:x.key}]):[];}},
+  {id:"scen",name:"季节工况",
+   re:/设计日|典型日|极端工况|不同季节|季节变化|冷天|热天|夏|冬|全年|四季/,
+   levels:(m,t)=>{
+     if((wantsCooling(t)&&wantsHeating(t))||/不同季节|季节变化|各个?季节|全年|四季|两季/.test(t))
+       return /设计日|极端/.test(t)
+         ?[["夏季设计日",{scen:"summer_design"}],["冬季设计日",{scen:"winter_design"}]]
+         :[["夏季典型日",{scen:"summer_typical"}],["冬季典型日",{scen:"winter_typical"}]];
+     return m==="cooling"?[["夏季设计日",{scen:"summer_design"}]]:[["冬季设计日",{scen:"winter_design"}]];},
+   nums:()=>[]},
   {id:"ins",name:"围护保温",
-   re:/保温|围护|建筑结构|房屋结构|老房|新房|隔热/,
-   levels:()=>[["保温差 UA520",{ins:"poor"}],["保温好 UA230",{ins:"good"}]]},
+   re:/保温|围护|建筑结构|房屋结构|老房|新房|隔热|房子.{0,3}(好|差)/,
+   levels:()=>[["保温差 UA520",{ins:"poor"}],["保温好 UA230",{ins:"good"}]],
+   // 「保温好差都试试」「各种保温」是扫档意图，不能当成点名某一档
+   nums:t=>/保温.{0,4}(好差|差好|好坏|都|各种|几种)|各种保温|不同保温/.test(t)?[]:
+     [["poor",/保温差|差保温|保温不好|老房|保温烂/,"保温差 UA520"],
+            ["medium",/保温中等|中等保温|一般保温|普通保温/,"保温中 UA350"],
+            ["good",/保温好|好保温|保温良好|新房|保温不错/,"保温好 UA230"]]
+     .filter(x=>x[1].test(t)).map(x=>[x[2],{ins:x[0]}])},
+  {id:"ua",name:"房屋规模",
+   re:/房子大小|面积|大房子|小房子|房型|户型|多大的房/,
+   levels:()=>[["小房子 UA250",{ua:250}],["大房子 UA500",{ua:500}]]},
+  {id:"ach",name:"气密性",
+   re:/漏风|气密|渗透|换气次数/,
+   levels:()=>[["漏风多 ACH1.0",{ach:1.0}],["气密好 ACH0.35",{ach:0.35}]],
+   nums:t=>nearNums(t,"ACH",0.1,2).map(v=>["ACH"+v,{ach:v}])},
   {id:"tons",name:"能力段",
-   re:/能力段|吨位|机型/,
+   re:/能力段|吨位|机型|大小机/,
    levels:()=>[["5 Ton",{tons:5}]]},
   {id:"cfm",name:"基准风量",
    re:/风量基准|基准风量|每吨风量|CFM/i,
    levels:()=>[["350 CFM/Ton",{cfm:350}],["450 CFM/Ton",{cfm:450}]]},
   {id:"db",name:"温控器回差",
-   re:/回差|温差带|死区/,
-   levels:()=>[["回差0.5°F",{db:0.5}],["回差2.0°F",{db:2}]]},
+   re:/回差|温差带/,
+   levels:()=>[["回差0.5°F",{db:0.5}],["回差2.0°F",{db:2}]],
+   nums:t=>nearNums(t,"(?:回差|温差带)",0.5,3).map(v=>["回差"+v+"°F",{db:v}])},
+  {id:"dz",name:"UP/DOWN 死区",
+   re:/死区|判定死区/,
+   levels:()=>[["死区±10%",{dz:10}],["死区±30%",{dz:30}]],
+   nums:t=>nearNums(t,"死区",5,40).map(v=>["死区±"+v+"%",{dz:v}])},
   {id:"bias",name:"能力测量偏差",
-   re:/测量偏差|能力偏差|传感器偏差|Gr[^a-z]/i,
-   levels:()=>[["偏差 +10%",{bias:10}],["偏差 −10%",{bias:-10}]]},
-  {id:"scen",name:"季节工况",
-   re:/设计日|典型日|极端工况|不同季节|季节变化/,
-   levels:m=>m==="cooling"?[["夏季设计日",{scen:"summer_design"}]]:[["冬季设计日",{scen:"winter_design"}]]},
+   re:/测量偏差|能力偏差|传感器偏差|偏差|实测能力|标称/,
+   levels:()=>[["偏差 +10%",{bias:10}],["偏差 −10%",{bias:-10}]],
+   nums:t=>nearNums(t,"偏差",-15,15).map(v=>["偏差"+v+"%",{bias:v}])},
+  {id:"aux",name:"电辅热",
+   re:/辅热|电辅热|辅助电热/,
+   levels:()=>[["无辅热 0kW",{aux:0}]],
+   nums:t=>nearNums(t,"辅热",0,12).map(v=>["辅热"+v+"kW",{aux:v}])},
+  {id:"fan",name:"停机风机策略",
+   re:/停机风机|风机常开|常开风机|停机后.{0,6}风机/,
+   levels:()=>[["停机风机常开",{fan:"on"}]]},
+  {id:"pre",name:"预学习",
+   re:/预学习/,
+   levels:()=>[["关预学习",{pre:false}]]},
 ];
 
 /* ---------- 内置规则解析：主对比 × 条件维度（不做全交叉，逐一调节） ---------- */
 function ruleParse(text){
   const t=String(text||"");
   const warnings=[],guessed=[];
-  const heating=/制热|供暖|采暖|冬(季|天|日|)|热泵制热/.test(t)&&!/制冷/.test(t);
-  const mode=heating?"heating":"cooling";
+  REJECTED.length=0;
+  const cool=wantsCooling(t),heat=wantsHeating(t);
+  const bothSeason=cool&&heat;
+  const mode=(heat&&!cool)?"heating":"cooling";
   const base={};
-  if(heating)base.scen=/设计|极端|最冷/.test(t)?"winter_design":"winter_typical";
-  else if(/夏[^。，,]{0,4}设计日|设计日|极端高温/.test(t))base.scen="summer_design";
-  // 轴命中（按优先级）：第一个 ≥2 档的作为主对比，其余降级为条件维度
-  const hits=AXES.map(a=>({a,list:a.build(t,mode)})).filter(x=>x.list.length>=2);
+  // 极端日与普通日的"天气对照"意图：base 用典型日，设计日单独作为一个条件档
+  const contrastWeather=/(设计日|最冷|最热|极端|寒潮|酷暑)[^。；;]{0,20}(普通|典型|一般|平时|平常|两种天气)|(普通|典型|一般|平时|平常)[^。；;]{0,20}(设计日|最冷|最热|极端)|(再碰上|再加上|顺便|再看看|要是|如果|万一|碰上)[^。；;]{0,10}(最冷|最热|设计日|极端|寒潮|酷暑)/.test(t);
+  if(!bothSeason){
+    if(mode==="heating")
+      base.scen=(!contrastWeather&&/设计|极端|最冷/.test(t))?"winter_design":"winter_typical";
+    else if(!contrastWeather&&/夏[^。，,]{0,4}设计日|设计日|极端高温/.test(t))base.scen="summer_design";
+  }
+  // 轴命中：取"用户最先点名"的那个（关键词出现最早）作为主对比，其余降级为条件维度
+  const hits=AXES.map(a=>({a,list:a.build(t,mode),pos:axisPos(a,t)}))
+    .filter(x=>x.list.length>=1);
+  // 主对比优先取"控制/设计"类轴（用户能改的产品选择）；地区与季节是工况，
+  // 只有在没有任何控制类轴可比时才充当对比臂
+  const ENV_AXES=new Set(["loc","scen"]);
+  const multiAll=hits.filter(x=>x.list.length>=2).sort((x,y)=>x.pos-y.pos);
+  const multiCtl=multiAll.filter(x=>!ENV_AXES.has(x.a.id));
+  const multi=multiCtl.length?multiCtl.concat(multiAll.filter(x=>ENV_AXES.has(x.a.id))):multiAll;
   let compare=null,axisId=null;
-  if(hits.length){
-    compare=hits[0].list.map(([name,set])=>({name,set}));
-    axisId=hits[0].a.id;
+  if(multi.length){
+    compare=multi[0].list.map(([name,set])=>({name,set}));
+    axisId=multi[0].a.id;
   }
   const conds=[];
   const usedDim=new Set([axisId]);
-  for(const h of hits.slice(1)){                       // 其余明确轴 → 条件维度
+  for(const h of multi.slice(1)){                       // 其余明确轴 → 条件维度
     usedDim.add(h.a.id);
     for(const [name,set] of h.list)conds.push({name,set,dim:h.a.name});
   }
-  for(const d of DIMS){                                 // 关键词命中的条件维度
+  const mergedSingles=[];
+  for(const h of hits.filter(x=>x.list.length===1)){     // 只点名一次的轴 → 共同设定
+    if(usedDim.has(h.a.id))continue;
+    usedDim.add(h.a.id);
+    const set=h.list[0][1];
+    let changed=false;
+    for(const [k,v] of Object.entries(set))
+      if(base[k]===undefined&&P0[k]!==v){base[k]=v;changed=true;}
+    if(changed){
+      mergedSingles.push({name:h.a.name,label:h.list[0][0],set});
+      guessed.push(h.a.name+"（只点名一次，作为所有方案的共同设定："+h.list[0][0]+"）");
+    }
+  }
+  for(const d of DIMS){                                  // 关键词命中的条件维度
     if(usedDim.has(d.id)||!d.re.test(t))continue;
-    if(d.id==="loc"&&axisId==="loc")continue;
     usedDim.add(d.id);
     const explicit=d.nums?d.nums(t):[];
-    const list=explicit.length>=1?explicit:d.levels(mode);
-    for(const [name,set] of list)conds.push({name,set,dim:d.name,guess:!explicit.length});
+    if(explicit.length===1){                            // 只点名一档 = 陈述一个固定条件 → 共同设定
+      let changed=false;
+      for(const [k,v] of Object.entries(explicit[0][1]))
+        if(base[k]===undefined&&P0[k]!==v){base[k]=v;changed=true;}
+      if(changed){
+        mergedSingles.push({name:d.name,label:explicit[0][0],set:explicit[0][1]});
+        guessed.push(d.name+"（只点名一档，作为所有方案的共同设定："+explicit[0][0]+"）");
+      }
+      continue;
+    }
+    const list=explicit.length>=2?explicit:d.levels(mode,t);
+    for(const [name,set] of list)conds.push({name,set,dim:d.name,guess:!(explicit.length>=2)});
   }
-  // 单一城市点名且未作为对比/维度 → 作为共同设定
-  if(!usedDim.has("loc")){
-    const cs=Object.keys(CITY_NAMES).filter(n=>t.includes(n));
-    if(cs.length===1)base.loc=CITY_NAMES[cs[0]];
+  if(!compare&&!conds.length&&mergedSingles.length){
+    // 用户只说"把某个值改成 X 看看" → 与该变量的默认值作两臂对比，而不是无对照地跑一版
+    const m=mergedSingles[mergedSingles.length-1];
+    const def={},cur={};
+    for(const k of Object.keys(m.set)){def[k]=P0[k];cur[k]=m.set[k];delete base[k];}
+    const defLabel=Object.entries(def).map(([k,v])=>(VAR_DEFS[k]?VAR_DEFS[k][0]:k)+" "+v).join("，");
+    compare=[{name:"默认（"+defLabel+"）",set:def},{name:m.label,set:cur}];
+    guessed.push(m.name+"（只给了一个值，已与默认值配成两臂对比）");
+    mergedSingles.pop();
   }
   if(!compare){
-    if(conds.length){
-      compare=[{name:"默认配置",set:{}}];               // 只扫条件，不做臂对比
+    if(conds.length)compare=[{name:"默认配置",set:{}}];   // 只扫条件，不做臂对比
+    else if(REJECTED.length){                            // 识别到了值但全部越界：不要伪装成"认不出"
+      compare=[{name:"默认配置",set:{}}];
     }else{
       compare=[{name:"自动风",set:{fanCtrl:"auto"}},
-               {name:"两档风·2档",set:{fanCtrl:"two",twoStage:2}},
+               {name:"两档风·1档",set:{fanCtrl:"two",twoStage:1}},
                {name:"固定100%",set:{fanCtrl:"fixed"}}];
       warnings.push("未识别到明确的对比对象，已按默认的三种风量模式对比——请在下方计划中确认或修改");
     }
   }
-  // 去重：与共同设定等价的档（如 base 已是设计日）或重复档不再单列
+  // 物理等价臂检测：固定100% 与 两档风·2档 在本模型中都是 100% 风量，跑出来必然重合
+  const hasFixed=compare.some(a=>a.set.fanCtrl==="fixed");
+  const two2=compare.find(a=>a.set.fanCtrl==="two"&&a.set.twoStage===2);
+  if(hasFixed&&two2&&!compare.some(a=>a.set.twoStage===1)){
+    two2.set.twoStage=1;two2.name="两档风·1档";
+    warnings.push("固定100% 与两档风 2 档在本模型中等价（都是 100% 风量），已把两档风臂改为 1 档（70%）以形成有效对比");
+  }
+  // 去重：与共同设定等价的档、重复档不再单列
   const ref={...P0,...base};
   const seen=new Set();
   const uniq=conds.filter(c=>{
@@ -1727,6 +1928,17 @@ function ruleParse(text){
     seen.add(k);return true;
   });
   const conditions=[{name:"基线",set:{}},...uniq];
+  const rejSeen=new Set();
+  for(const r of REJECTED){
+    const key=r.kw+"|"+r.bad.join(",");
+    if(rejSeen.has(key))continue;
+    rejSeen.add(key);
+    warnings.push("识别到 "+r.bad.join("/")+" 超出「"+r.kw.replace(/[()?:]|\\b/g,"").split("|")[0]
+      +"」可设范围 "+r.lo+"~"+r.hi+"，已忽略——请确认单位或改用范围内的值");
+  }
+  if(compare.length===1&&uniq.length===0)
+    warnings.push("没能从这句话里识别出任何对比对象或条件维度，当前计划只有 1 个方案、等于没有对照——"
+      +"请补充要对比什么（如「自动风和二档风」）或在哪些条件下对比（如「不同热负荷」）");
   // 自动取值提示只列出实际保留下来的档
   const byDim=new Map();
   for(const c of uniq)if(c.guess){
@@ -1735,14 +1947,14 @@ function ruleParse(text){
   }
   for(const [dim,names] of byDim)
     guessed.push(dim+"（未给数值，取代表档位："+names.join(" / ")+"）");
-  // 运行规模自适应（可在计划 JSON 中改）
+  // 运行规模：仿真极快（~20 万步/秒），不为方案多而牺牲单个方案的时长
   const runs=compare.length*conditions.length;
   const dm=t.match(/(\d+(?:\.\d+)?)\s*天/);
-  // 预热取整日（24h）：室内湿平衡时间常数约 25h，且保证各方案测量都从同一时刻起算
-  const days=dm?+dm[1]:(runs<=20?3:runs<=40?2:1.5);
-  const warm=24;
-  if(!dm)guessed.push("测量时长（按 "+runs+" 个方案自动取 "+days+" 天 + 预热 "+warm+" h："
+  const days=dm?+dm[1]:(runs<=40?3:2);
+  const warm=24;                                        // 整日预热：湿平衡时间常数约 25h
+  if(!dm)guessed.push("测量时长（每方案 "+days+" 天 + 预热 "+warm+" h："
     +"湿平衡时间常数约 25h，预热不足会高估除湿量）");
+  if(runs>24)warnings.push("方案数 "+runs+" 偏多，可在计划 JSON 里删掉几个条件档再跑");
   return {days,warmup_h:warm,base,compare,conditions,focus:t,_warnings:warnings,_guessed:guessed};
 }
 
@@ -1962,7 +2174,7 @@ function renderPlan(vp,src){
     +"绝对值会随预热落点变化，方案间的相对比较有效、绝对值不宜外推。</div>";
   document.getElementById("aiPlan").innerHTML=html;
 }
-function focusMetrics(f){
+function focusMetrics(f,heating){
   const s=new Set();
   if(/达温|拉温|降温速度|升温速度|响应|快慢|制冷速度/.test(f)){s.add("t2");s.add("hz95");}
   if(/除湿|湿度|潮/.test(f)){s.add("dehum");s.add("rh60");}
@@ -1971,7 +2183,8 @@ function focusMetrics(f){
   if(/循环|启停|间隔/.test(f)){s.add("cyc");s.add("period");}
   if(/辅热/.test(f))s.add("auxk");
   if(/化霜/.test(f))s.add("defr");
-  if(!s.size)["dehum","rh60","rmse"].forEach(k=>s.add(k));
+  if(!s.size)(heating?["auxk","defr","rmse"]:["dehum","rh60","rmse"]).forEach(k=>s.add(k));
+  if(heating){s.delete("dehum");s.delete("rh60");}   // 制热模式下除湿指标无意义
   s.add("t2");s.add("kwh");        // 达温与能耗始终随行，便于看权衡
   return REC_COLS.filter(c=>s.has(c[1]));
 }
@@ -1986,7 +2199,8 @@ function deltaCell(v,b,dec,lowerBetter){
   return s;
 }
 function renderExpSummary(recs,vp){
-  const cols=focusMetrics(vp&&vp.focus||"");
+  const heat=!!(vp&&vp.base&&/^winter/.test(vp.base.scen||""));
+  const cols=focusMetrics(vp&&vp.focus||"",heat);
   const el=document.getElementById("aiSummary");
   const arms=vp&&vp.compare?vp.compare.map(a=>a.name):[];
   if(arms.length>=2&&recs.some(r=>r.arm)){
