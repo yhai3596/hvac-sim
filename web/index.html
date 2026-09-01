@@ -1,0 +1,2951 @@
+<title>变频空调控制仿真台</title>
+<style>
+:root{
+  color-scheme:light;
+  --plane:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e;
+  --muted:#898781; --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+  --s-room:#2a78d6; --s-out:#eb6834; --s-cap:#1baf7a; --s-tgt:#4a3aa7; --s-rh:#1baf7a; --s-hz:#eb6834;
+  --band:rgba(42,120,214,.10); --callband:rgba(27,175,122,.10); --defband:rgba(235,104,52,.16);
+  --chip:#f0efec; --accent:#2a78d6; --accent-ink:#fcfcfb;
+  --good:#0ca30c; --bad:#d03b3b;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --plane:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7;
+    --muted:#898781; --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+    --s-room:#3987e5; --s-out:#d95926; --s-cap:#199e70; --s-tgt:#9085e9; --s-rh:#199e70; --s-hz:#d95926;
+    --band:rgba(57,135,229,.14); --callband:rgba(25,158,112,.14); --defband:rgba(217,89,38,.20);
+    --chip:#26262a; --accent:#3987e5; --accent-ink:#0d0d0d;
+    --good:#0ca30c; --bad:#e66767;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --plane:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7;
+  --muted:#898781; --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+  --s-room:#3987e5; --s-out:#d95926; --s-cap:#199e70; --s-tgt:#9085e9; --s-rh:#199e70; --s-hz:#d95926;
+  --band:rgba(57,135,229,.14); --callband:rgba(25,158,112,.14); --defband:rgba(217,89,38,.20);
+  --chip:#26262a; --accent:#3987e5; --accent-ink:#0d0d0d;
+  --good:#0ca30c; --bad:#e66767;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font:14px/1.55 system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+button,select,input{font:inherit;color:inherit}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;
+  padding:10px 20px;border-bottom:1px solid var(--ring);background:var(--surface)}
+header h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.02em}
+header .sub{color:var(--muted);font-size:12px}
+.spacer{flex:1}
+.transport{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.transport .clock{font-variant-numeric:tabular-nums;color:var(--ink2);min-width:8.5em;text-align:right}
+.btn{border:1px solid var(--ring);background:var(--surface);border-radius:7px;padding:6px 12px;cursor:pointer}
+.btn:hover{background:var(--chip)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.btn.small{padding:3px 10px;font-size:12px}
+select.btn{padding:5px 8px}
+.chiprow{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--ring);background:var(--chip);border-radius:999px;
+  padding:3px 12px;font-size:12px;cursor:pointer;color:var(--ink2)}
+.chip:hover{color:var(--ink)}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+.app{display:grid;grid-template-columns:312px 1fr;gap:16px;padding:16px 20px;max-width:1560px;margin:0 auto}
+@media (max-width:940px){.app{grid-template-columns:1fr}}
+
+aside{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:12px 14px}
+.panel h2{font-size:11px;margin:0 0 8px;color:var(--muted);font-weight:650;
+  text-transform:uppercase;letter-spacing:.09em}
+.param{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;margin:7px 0}
+.param label{color:var(--ink2);font-size:13px}
+.param .val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink)}
+.param input[type=range]{grid-column:1/3;width:100%;accent-color:var(--accent);margin:0}
+.radio-row{display:flex;gap:6px;margin:4px 0;flex-wrap:wrap}
+.radio-row .chip{flex:1;text-align:center;min-width:60px}
+.checkline{display:flex;gap:8px;align-items:center;color:var(--ink2);margin:8px 0 2px;font-size:13px}
+.hint{color:var(--muted);font-size:12px;margin:6px 0 0}
+.readout{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink2);margin:3px 0}
+.readout b{font-variant-numeric:tabular-nums;color:var(--ink);font-weight:600}
+select.wide{width:100%;border:1px solid var(--ring);background:var(--surface);border-radius:7px;padding:6px 8px;margin:2px 0 6px}
+
+main{display:flex;flex-direction:column;gap:14px;min-width:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.kpi{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:8px 11px}
+.kpi .k{font-size:11px;color:var(--muted);letter-spacing:.03em;white-space:nowrap}
+.kpi .v{font-size:19px;font-weight:650;margin-top:1px;font-variant-numeric:tabular-nums}
+.kpi .u{font-size:10.5px;color:var(--ink2);font-weight:400;margin-left:2px}
+
+.chartcard{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:10px 12px 6px;position:relative}
+.chartcard .head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+.chartcard .head b{font-size:13px;font-weight:650}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--ink2);flex-wrap:wrap}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+canvas{display:block;width:100%}
+.tooltip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--ring);
+  border-radius:7px;padding:6px 9px;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,.14);
+  display:none;z-index:5;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tooltip .tt-t{color:var(--muted);margin-bottom:2px}
+.tooltip .row{display:flex;gap:8px;justify-content:space-between}
+
+.duo{display:grid;grid-template-columns:1fr 350px;gap:14px}
+@media (max-width:1180px){.duo{grid-template-columns:1fr}}
+.state-pill{display:inline-block;border-radius:999px;padding:2px 12px;font-size:12px;font-weight:600;
+  background:var(--chip);color:var(--ink2)}
+.state-pill.up{background:var(--s-room);color:var(--accent-ink)}
+.state-pill.down{background:var(--s-out);color:var(--accent-ink)}
+.ratio-wrap{margin:10px 0 4px}
+.ratio-bar{position:relative;height:14px;border-radius:7px;background:var(--chip);overflow:hidden}
+.ratio-bar .fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);opacity:.85}
+.ratio-bar .tick{position:absolute;top:0;bottom:0;width:1px;background:var(--axis)}
+.ratio-scale{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+table.bins,table.records{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+table.bins th,table.records th{color:var(--muted);font-weight:500;text-align:right;padding:3px 6px;border-bottom:1px solid var(--grid);white-space:nowrap}
+table.bins th:first-child,table.bins td:first-child,
+table.records th:first-child,table.records td:first-child{text-align:left}
+table.bins td,table.records td{text-align:right;padding:3px 6px;border-bottom:1px solid var(--grid);color:var(--ink2);white-space:nowrap}
+table.bins td b,table.records td b{color:var(--ink);font-weight:600}
+.note{color:var(--muted);font-size:12px;line-height:1.6}
+table.defs{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0}
+table.defs th{color:var(--muted);font-weight:500;text-align:left;padding:4px 8px;border-bottom:1px solid var(--grid);white-space:nowrap}
+table.defs td{padding:4px 8px;border-bottom:1px solid var(--grid);color:var(--ink2);vertical-align:top}
+table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
+.cfgrow{display:grid;grid-template-columns:auto 1.1fr .8fr 1.6fr 1.1fr 1.4fr auto auto;gap:6px;align-items:center;margin:5px 0}
+.cfgrow input[type=text],.cfgrow input[type=password],.cfgrow select{
+  border:1px solid var(--ring);background:var(--surface);border-radius:6px;padding:4px 7px;font-size:12px;min-width:0;width:100%}
+.cfgrow .tstat{font-size:11px;min-width:7em}
+.cfg-head{font-size:11px;color:var(--muted);display:grid;grid-template-columns:auto 1.1fr .8fr 1.6fr 1.1fr 1.4fr auto auto;gap:6px;margin-top:8px}
+@media (max-width:900px){.cfgrow,.cfg-head{grid-template-columns:auto 1fr 1fr;grid-auto-rows:auto}}
+.mdout{font-size:13.5px;line-height:1.7;max-width:75em}
+.mdout h1{font-size:17px;margin:14px 0 6px}
+.mdout h2{font-size:15px;margin:14px 0 6px}
+.mdout h3{font-size:13.5px;margin:12px 0 4px}
+.mdout ul,.mdout ol{margin:4px 0;padding-left:22px}
+.mdout li{margin:2px 0}
+.mdout p{margin:6px 0}
+.mdout code{background:var(--chip);border-radius:4px;padding:0 4px;font-size:12px}
+.mdout table{border-collapse:collapse;margin:8px 0;font-size:12.5px;font-variant-numeric:tabular-nums}
+.mdout th,.mdout td{border:1px solid var(--grid);padding:3px 8px;text-align:left}
+.mdout th{color:var(--muted);font-weight:600}
+.llm-status{font-size:12.5px;color:var(--ink2);margin:6px 0}
+.llm-status.err{color:var(--bad)}
+.delta-good{color:var(--good);font-weight:600}
+.delta-bad{color:var(--bad);font-weight:600}
+.records-wrap{overflow-x:auto}
+.rec-actions{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+#csvBox{width:100%;height:110px;font:11px/1.4 ui-monospace,monospace;background:var(--chip);
+  color:var(--ink2);border:1px solid var(--ring);border-radius:7px;padding:8px;margin-top:8px}
+#aiInput{width:100%;min-height:52px;resize:vertical;font:inherit;background:var(--surface);
+  color:var(--ink);border:1px solid var(--ring);border-radius:7px;padding:8px 10px;margin:4px 0 2px}
+#aiPlanJson{width:100%;height:150px;resize:vertical;font:11px/1.45 ui-monospace,monospace;
+  background:var(--chip);color:var(--ink2);border:1px solid var(--ring);border-radius:7px;padding:8px;margin:6px 0}
+.exp-progress{height:8px;border-radius:4px;background:var(--chip);overflow:hidden;margin:6px 0}
+.exp-progress .bar{height:100%;width:0;background:var(--accent);transition:width .15s}
+#aiPlan ol{margin:4px 0;padding-left:22px;font-size:12.5px;color:var(--ink2)}
+#aiPlan li{margin:2px 0}
+#aiPlan h4{font-size:12.5px;margin:10px 0 2px}
+.plan-stat{display:flex;flex-wrap:wrap;gap:6px 18px;margin:8px 0 2px;padding:7px 11px;
+  background:var(--chip);border-radius:8px;font-size:12.5px;color:var(--ink2)}
+.plan-stat b{color:var(--ink);font-variant-numeric:tabular-nums}
+#aiSummary table.records td{white-space:nowrap}
+/* ===== 报告导出：屏幕上隐藏，打印时只出这一份文档 ===== */
+#printRoot{display:none}
+@media print{
+  /* 强制浅色，避免深色主题打印出满页黑底 */
+  :root,:root[data-theme="dark"]{--ink:#000;--ink2:#333;--muted:#666;--grid:#ccc;--surface:#fff;--plane:#fff}
+  body{background:#fff!important;color:#000!important;font-size:10.5pt}
+  .app,header,.tooltip{display:none!important}
+  #printRoot{display:block!important;padding:0;max-width:none}
+  @page{size:A4;margin:16mm 14mm}
+  #printRoot h1{font-size:19pt;margin:0 0 2mm}
+  #printRoot h2{font-size:13pt;margin:7mm 0 2mm;padding-bottom:1mm;border-bottom:1px solid #999;
+    break-after:avoid;page-break-after:avoid}
+  #printRoot h3{font-size:11pt;margin:4mm 0 1.5mm;break-after:avoid;page-break-after:avoid}
+  #printRoot p,#printRoot li{orphans:3;widows:3}
+  #printRoot table{width:100%;border-collapse:collapse;font-size:8.5pt;margin:2mm 0;
+    break-inside:auto;font-variant-numeric:tabular-nums}
+  #printRoot th,#printRoot td{border:1px solid #bbb;padding:1.2mm 2mm;text-align:right}
+  #printRoot th{background:#f0f0f0;font-weight:600}
+  #printRoot th:first-child,#printRoot td:first-child,#printRoot td.tl,#printRoot th.tl{text-align:left}
+  #printRoot tr{break-inside:avoid;page-break-inside:avoid}
+  #printRoot thead{display:table-header-group}
+  #printRoot .meta{font-size:9pt;color:#555;margin:0 0 4mm}
+  #printRoot .lead{font-size:9.5pt;color:#333}
+  #printRoot .caveat{font-size:8.5pt;color:#444;border-left:2px solid #999;padding-left:3mm;margin:3mm 0}
+  #printRoot .pagebreak{break-before:page;page-break-before:always}
+  #printRoot code{font-family:ui-monospace,monospace;font-size:8.5pt}
+}
+#aiSummary table.records td:first-child{white-space:normal;min-width:9em}
+#aiSummary h4{font-size:12.5px;margin:10px 0 4px}
+#aiSummary ul{margin:2px 0 8px;padding-left:20px;font-size:12.5px;color:var(--ink2)}
+#aiSummary p{margin:6px 0 2px;font-size:12.5px}
+</style>
+
+<header>
+  <div>
+    <h1>变频空调控制仿真台</h1>
+    <div class="sub">ASHRAE 气候 · 2R2C+湿平衡 · 变频热泵（压缩机/风量/化霜/辅热） · V1.44 负荷预测 + Tes/Tcs 自学习</div>
+  </div>
+  <div style="display:flex;gap:6px;align-items:center">
+    <select id="locSel" class="btn" aria-label="地点"></select>
+    <select id="scenSel" class="btn" aria-label="季节场景">
+      <option value="summer_design">夏季设计日</option>
+      <option value="summer_typical" selected>典型夏日</option>
+      <option value="winter_design">冬季设计日</option>
+      <option value="winter_typical">典型冬日</option>
+    </select>
+  </div>
+  <div class="spacer"></div>
+  <div class="transport">
+    <span class="clock" id="clock">第 1 天 12:00</span>
+    <select id="speed" class="btn" aria-label="仿真速度">
+      <option value="60">×60</option>
+      <option value="600">×600</option>
+      <option value="1800" selected>×1800（1s=30min）</option>
+      <option value="7200">×7200</option>
+      <option value="21600">×21600（1s=6h）</option>
+    </select>
+    <button class="btn primary" id="playBtn">暂停</button>
+    <button class="btn" id="statBtn" title="清零统计指标，保留房间状态与学习状态">重置统计</button>
+    <button class="btn" id="resetBtn">重置全部</button>
+  </div>
+</header>
+
+<div class="app">
+<aside>
+  <div class="panel">
+    <h2>气候（按地点填充，可微调）</h2>
+    <div class="readout"><span>气候区 / 设计干球</span><b id="ro_zone">—</b></div>
+    <div class="param"><label>平均室外温度</label><span class="val"><span id="v_tmean"></span> ℃</span>
+      <input type="range" id="p_tmean" min="-20" max="45" step="0.5"></div>
+    <div class="param"><label>日温度振幅</label><span class="val"><span id="v_tamp"></span> ℃</span>
+      <input type="range" id="p_tamp" min="0" max="10" step="0.5"></div>
+    <div class="param"><label>室外露点（湿负荷）</label><span class="val"><span id="v_dew"></span> ℃</span>
+      <input type="range" id="p_dew" min="-20" max="27" step="0.5"></div>
+    <div class="param"><label>日照得热峰值</label><span class="val"><span id="v_solar"></span> kW</span>
+      <input type="range" id="p_solar" min="0" max="5" step="0.1"></div>
+  </div>
+  <div class="panel">
+    <h2>房屋与负荷构成</h2>
+    <select id="insSel" class="wide" aria-label="保温档">
+      <option value="poor">老房（保温差，UA 520 / 1.0 ACH）</option>
+      <option value="medium" selected>普通存量房（UA 350 / 0.6 ACH）</option>
+      <option value="good">新规范（UA 230 / 0.35 ACH）</option>
+    </select>
+    <div class="param"><label>围护传热 UA</label><span class="val"><span id="v_ua"></span> W/K</span>
+      <input type="range" id="p_ua" min="150" max="650" step="10"></div>
+    <div class="param"><label>渗透换气 ACH</label><span class="val"><span id="v_ach"></span></span>
+      <input type="range" id="p_ach" min="0.1" max="1.5" step="0.05"></div>
+    <div class="param"><label>机械新风量</label><span class="val"><span id="v_vent"></span> m³/h</span>
+      <input type="range" id="p_vent" min="0" max="300" step="10"></div>
+    <div class="param"><label>内扰显热</label><span class="val"><span id="v_qint"></span> W</span>
+      <input type="range" id="p_qint" min="0" max="1500" step="50"></div>
+    <div class="param"><label>人员/生活产湿</label><span class="val"><span id="v_mgain"></span> kg/h</span>
+      <input type="range" id="p_mgain" min="0" max="2.5" step="0.05"></div>
+    <div class="readout"><span>设计负荷 显热+潜热</span><b id="ro_load">—</b></div>
+    <div class="readout"><span>湿负荷 渗透/新风/产湿</span><b id="ro_moist">—</b></div>
+    <p class="hint">湿源三路各自物理单位：渗透与新风按 换气量×(室外−室内含湿量) 计算，产湿按 kg/h；
+      运行中拖动即可模拟人员活动/开新风导致的湿度上升。满足度只缩放显热源，湿源不参与缩放。</p>
+  </div>
+  <div class="panel">
+    <h2>设备与负荷满足度</h2>
+    <div class="param"><label>能力段</label><span class="val"></span></div>
+    <div class="radio-row" id="tonSel">
+      <button class="chip on" data-t="3">3 Ton（10.6 kW）</button>
+      <button class="chip" data-t="5">5 Ton（17.6 kW）</button>
+    </div>
+    <div class="param"><label>负荷满足度（额定/设计负荷）</label><span class="val"><span id="v_sat"></span> %</span>
+      <input type="range" id="p_sat" min="50" max="150" step="5"></div>
+    <div class="readout"><span>等效设计负荷 / 负荷缩放</span><b id="ro_sizing">—</b></div>
+    <div class="param"><label>能力测量偏差（Gr×Δh）</label><span class="val"><span id="v_bias"></span> %</span>
+      <input type="range" id="p_bias" min="-20" max="20" step="1"></div>
+    <div class="param"><label>辅助电热（制热）</label><span class="val"><span id="v_aux"></span> kW</span>
+      <input type="range" id="p_aux" min="0" max="15" step="1"></div>
+    <p class="hint">满足度锚定负荷总量（100% = 额定能力恰好覆盖设计负荷）；房屋参数决定负荷构成与热惯性。</p>
+  </div>
+  <div class="panel">
+    <h2>内机风量</h2>
+    <div class="param"><label>100% 风量基准</label><span class="val"><span id="v_cfm"></span> CFM/ton</span>
+      <input type="range" id="p_cfm" min="300" max="460" step="10"></div>
+    <div class="param"><label>风量模式</label><span class="val"></span></div>
+    <div class="radio-row" id="fanCtrlSel">
+      <button class="chip on" data-fc="fixed">固定 100%</button>
+      <button class="chip" data-fc="two">两档风</button>
+      <button class="chip" data-fc="auto">自动风</button>
+    </div>
+    <div id="fanTwo" style="display:none">
+      <div class="radio-row" id="stageSel">
+        <button class="chip" data-s="1">1 档（70%）</button>
+        <button class="chip on" data-s="2">2 档（100%）</button>
+      </div>
+    </div>
+    <div id="fanAuto" style="display:none">
+      <div class="param"><label>启动初始风量</label><span class="val"><span id="v_ainit"></span> %</span>
+        <input type="range" id="p_ainit" min="40" max="90" step="5"></div>
+      <div class="param"><label>初始风量保持</label><span class="val"><span id="v_await"></span> min</span>
+        <input type="range" id="p_await" min="10" max="90" step="5"></div>
+      <div class="param"><label>提档间隔</label><span class="val"><span id="v_aint"></span> min</span>
+        <input type="range" id="p_aint" min="5" max="20" step="1"></div>
+      <div class="param"><label>每档提高</label><span class="val"><span id="v_astep"></span> %</span>
+        <input type="range" id="p_astep" min="5" max="20" step="5"></div>
+      <p class="hint">达温停机后再次启动按初始风量；保持时长内未达温则按间隔逐档提高，直到 100%。外机按自身逻辑运行。</p>
+    </div>
+    <div class="param"><label>停机风机策略</label><span class="val"></span></div>
+    <div class="radio-row" id="fanSel">
+      <button class="chip on" data-f="auto">AUTO（延迟90s停）</button>
+      <button class="chip" data-f="on">常开</button>
+    </div>
+    <div class="readout"><span>当前风量 / 旁通因子</span><b id="ro_cfm">—</b></div>
+    <p class="hint">低风量段盘管更冷 → 除湿强、显热弱。常开风机会把盘管存水再蒸发回房间。</p>
+  </div>
+  <div class="panel">
+    <h2>压缩机</h2>
+    <div class="param"><label>启动频率</label><span class="val"><span id="v_fstart"></span> Hz</span>
+      <input type="range" id="p_fstart" min="20" max="45" step="1"></div>
+    <div class="param"><label>启动低频保持（回油）</label><span class="val"><span id="v_hold"></span> s</span>
+      <input type="range" id="p_hold" min="0" max="360" step="30"></div>
+    <div class="param"><label>最大爬升速率</label><span class="val"><span id="v_ramp"></span> Hz/s</span>
+      <input type="range" id="p_ramp" min="0.1" max="2" step="0.1"></div>
+    <div class="param"><label>最大频率</label><span class="val"><span id="v_fmax"></span> Hz</span>
+      <input type="range" id="p_fmax" min="50" max="75" step="1"></div>
+  </div>
+  <div class="panel">
+    <h2>温控器（算法不可见）</h2>
+    <div class="param"><label>设定温度</label><span class="val"><span id="v_tset"></span> ℃</span>
+      <input type="range" id="p_tset" min="17" max="28" step="0.5"></div>
+    <div class="param"><label>回差</label><span class="val"><span id="v_db"></span> °F</span>
+      <input type="range" id="p_db" min="0.5" max="3" step="0.25"></div>
+    <p class="hint">运行中拖动设定温度即可做阶跃实验（pull-down 达温观察）。</p>
+  </div>
+  <div class="panel">
+    <h2>控制算法</h2>
+    <div class="radio-row" id="algoSel">
+      <button class="chip" data-a="A">A 定频</button>
+      <button class="chip" data-a="B">B 固定目标</button>
+      <button class="chip on" data-a="C">C V1.44</button>
+    </div>
+    <div id="algoB" style="display:none">
+      <div class="param"><label>固定 Tes/Tcs</label><span class="val"><span id="v_tgtb"></span> ℃</span>
+        <input type="range" id="p_tgtb" min="4" max="52" step="0.5"></div>
+    </div>
+    <div id="algoC">
+      <div class="param"><label>目标运转时间 TA</label><span class="val"><span id="v_ta"></span> min</span>
+        <input type="range" id="p_ta" min="20" max="120" step="5"></div>
+      <div class="param"><label>判定死区</label><span class="val">±<span id="v_dz"></span> %</span>
+        <input type="range" id="p_dz" min="10" max="40" step="5"></div>
+      <div class="param"><label>目标值调整速率</label><span class="val"><span id="v_rate"></span> ℃/min</span>
+        <input type="range" id="p_rate" min="0.05" max="0.3" step="0.05"></div>
+      <div class="param"><label>每循环调整限幅</label><span class="val"><span id="v_cyc"></span> ℃</span>
+        <input type="range" id="p_cyc" min="0.5" max="3" step="0.5"></div>
+      <label class="checkline"><input type="checkbox" id="p_pre" checked>预学习完成（负荷初值=当前设计负荷估算）</label>
+      <p class="hint">切换算法/模式或预学习开关会重置统计与学习状态（房间状态保留）。</p>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>约束说明</h2>
+    <p class="note">北美替代市场内外机无通讯：算法层只能看到 thermo-on/off 时序、室外温度与外机自测能力（可加偏差）。室温、湿度、设定值、回差只对温控器/房间模型可见。气候设计值为内置 ASHRAE 参数，发布前请对照 ashrae-meteo.info 复核。</p>
+  </div>
+</aside>
+
+<main>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="chartcard">
+    <div class="head"><b>温度</b>
+      <span class="legend">
+        <span><i style="background:var(--s-room)"></i>室温</span>
+        <span><i style="background:var(--s-out)"></i>室外</span>
+        <span><i style="background:var(--band);border:1px solid var(--axis)"></i>设定带</span>
+      </span>
+      <div class="spacer"></div>
+      <div class="chiprow" id="winSel">
+        <button class="chip" data-w="21600">6h</button>
+        <button class="chip on" data-w="86400">24h</button>
+        <button class="chip" data-w="259200">3天</button>
+        <button class="chip" data-w="0">全部</button>
+      </div>
+    </div>
+    <canvas id="chTemp" height="190"></canvas>
+    <div class="tooltip" id="ttTemp"></div>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>室内相对湿度</b>
+      <span class="legend"><span><i style="background:var(--s-rh)"></i>RH%</span><span style="color:var(--muted)">— 60% 舒适上限</span></span>
+    </div>
+    <canvas id="chRh" height="100"></canvas>
+    <div class="tooltip" id="ttRh"></div>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>压缩机频率</b>
+      <span class="legend">
+        <span><i style="background:var(--s-hz)"></i>Hz</span>
+        <span><i style="background:var(--callband);border:1px solid var(--axis)"></i>thermo-on</span>
+        <span><i style="background:var(--defband);border:1px solid var(--axis)"></i>化霜</span>
+      </span>
+    </div>
+    <canvas id="chHz" height="100"></canvas>
+    <div class="tooltip" id="ttHz"></div>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>输出能力（显热｜制热为注入）</b>
+      <span class="legend"><span><i style="background:var(--s-cap)"></i>kW</span></span>
+    </div>
+    <canvas id="chCap" height="100"></canvas>
+    <div class="tooltip" id="ttCap"></div>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>控制目标 <span id="tgtName">Tes</span></b>
+      <span class="legend"><span><i style="background:var(--s-tgt)"></i>℃（V1.44 分箱学习值）</span></span>
+    </div>
+    <canvas id="chTgt" height="90"></canvas>
+    <div class="tooltip" id="ttTgt"></div>
+  </div>
+
+  <div class="duo">
+    <div class="chartcard">
+      <div class="head"><b>逐循环 运转 t2 / 停机 t1</b>
+        <span class="legend">
+          <span><i style="background:var(--s-room)"></i>t2 运转（达温）min</span>
+          <span><i style="background:var(--muted)"></i>t1 停机 min</span>
+        </span>
+      </div>
+      <canvas id="chCyc" height="170"></canvas>
+      <div class="tooltip" id="ttCyc"></div>
+    </div>
+    <div class="chartcard" id="algoPanel">
+      <div class="head"><b>V1.44 内部状态</b><span class="state-pill" id="sigPill">信号 —</span></div>
+      <div class="ratio-wrap">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink2)">
+          <span>预测总能力 / 目标总负荷</span><b id="ratioTxt" style="font-variant-numeric:tabular-nums">—</b>
+        </div>
+        <div class="ratio-bar">
+          <div class="fill" id="ratioFill" style="width:0%"></div>
+          <div class="tick" style="left:40%"></div><div class="tick" style="left:45%"></div>
+          <div class="tick" style="left:55%"></div><div class="tick" style="left:60%"></div>
+        </div>
+        <div class="ratio-scale"><span>0</span><span>80%</span><span>90%</span><span>110%</span><span>120%</span><span>200%</span></div>
+      </div>
+      <div class="note" id="cycNow">—</div>
+      <div style="max-height:200px;overflow:auto;margin-top:8px">
+        <table class="bins" id="binTable"></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>智能实验助手</b>
+      <span class="note">自然语言描述测试条件 → 解析为实验计划（未提到的变量取默认值，逐一调节）→ 评估确认 → 批量仿真 → 对比 → 报告</span>
+    </div>
+    <textarea id="aiInput" rows="2" spellcheck="false"
+      placeholder="例：对比自动风和二档风在不同热负荷、湿度负荷、室内设定温度以及不同地区下的达温与除湿差异"></textarea>
+    <div class="rec-actions">
+      <button class="btn small primary" id="aiParseBtn">解析需求（评估计划）</button>
+      <button class="btn small primary" id="aiGoBtn" hidden>开始运行</button>
+      <button class="btn small" id="aiCancelBtn" hidden>取消计划</button>
+      <button class="btn small" id="aiStopBtn" hidden>停止实验</button>
+      <button class="btn small" id="aiPromptBtn">复制解析提示词</button>
+      <span class="note">先解析出计划供确认（可直接编辑下方计划 JSON）再执行；多维需求按「对比臂 × 条件维度」组织——臂间只差一个变量，条件逐一调节、不做全交叉。</span>
+    </div>
+    <div class="llm-status" id="aiStatus">解析优先走已配置的 API；无 API 时内置规则可识别常见对比与条件维度。外部大模型返回的计划 JSON 也可粘贴到输入框解析。</div>
+    <div class="exp-progress" id="aiProg" hidden><div class="bar" id="aiBar"></div></div>
+    <div id="aiPlan"></div>
+    <textarea id="aiPlanJson" hidden spellcheck="false" aria-label="实验计划 JSON（可编辑）"></textarea>
+    <div id="aiSummary"></div>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>方案对比（基准点工作流）</b>
+      <span class="note">流程：设参数 → 重置统计 → 运行足够时长 → 记录方案 → 改参数再跑再记录 → 与基准对比</span>
+    </div>
+    <div class="rec-actions">
+      <button class="btn small primary" id="recBtn">记录当前运行为方案</button>
+      <button class="btn small" id="csvBtn">复制 CSV</button>
+      <button class="btn small" id="defsBtn">指标说明</button>
+      <button class="btn small" id="clearRecBtn">清空记录</button>
+      <span class="note" id="recHint"></span>
+    </div>
+    <div id="defsPanel" hidden><table class="defs" id="defsTable"></table></div>
+    <div class="records-wrap"><table class="records" id="recTable"></table></div>
+    <textarea id="csvBox" hidden readonly aria-label="CSV 内容"></textarea>
+  </div>
+
+  <div class="chartcard">
+    <div class="head"><b>LLM 方案分析报告</b>
+      <span class="note">基于上方方案记录生成对比分析；API Key 仅保存在本机浏览器</span>
+    </div>
+    <div class="rec-actions">
+      <button class="btn small primary" id="genBtn">生成分析报告</button>
+      <button class="btn small" id="promptBtn">复制分析提示词</button>
+      <button class="btn small" id="cfgBtn">API 配置</button>
+      <button class="btn small" id="copyRepBtn" hidden>复制报告</button>
+      <button class="btn small primary" id="pdfBtn" hidden>导出 PDF</button>
+      <button class="btn small" id="mdBtn" hidden>下载 Markdown</button>
+      <button class="btn small" id="htmlBtn" hidden>下载 HTML</button>
+    </div>
+    <div class="llm-status" id="llmStatus">未配置 API 时可用「复制分析提示词」把数据粘贴到任意大模型对话中分析。</div>
+    <div id="cfgPanel" hidden>
+      <div class="rec-actions" id="presetRow">
+        <span class="note">添加预置：</span>
+        <button class="btn small" data-p="claude">+ Claude</button>
+        <button class="btn small" data-p="openai">+ OpenAI</button>
+        <button class="btn small" data-p="deepseek">+ DeepSeek</button>
+        <button class="btn small" data-p="glm">+ 智谱 GLM</button>
+        <button class="btn small" data-p="kimi">+ Kimi</button>
+        <button class="btn small" data-p="minimax">+ MiniMax</button>
+      </div>
+      <div class="cfg-head"><span>启用</span><span>名称</span><span>协议</span><span>Base URL</span><span>模型</span><span>API Key</span><span></span><span></span></div>
+      <div id="cfgRows"></div>
+      <p class="hint">多条启用的配置按轮询顺序调用，失败自动切换下一条。模型名以各家最新文档为准，可直接修改；Base 可填完整
+        chat/completions 地址（MiniMax 的 chatcompletion_v2 亦可）。注意：Artifact 预览环境会拦截外部网络请求，
+        外部 API 需在本地打开 web/index.html 或自行部署后使用。Key 仅存于本机浏览器 localStorage。</p>
+    </div>
+    <div class="mdout" id="repOut"></div>
+    <p class="hint" id="pdfHint" hidden>「导出 PDF」会打开浏览器打印对话框，在目标里选
+      <b>「另存为 PDF」</b>（macOS 左下角 PDF ▾ → 存储为 PDF；Windows 选 Microsoft Print to PDF）。
+      这样出来的 PDF 中文正常、文字可选、矢量清晰，且不依赖任何外部库；在 Artifact 预览里打印
+      可能被沙箱限制，本地打开一定可用。「下载 Markdown / HTML」在 Artifact 里会先弹出保存确认。</p>
+  </div>
+</main>
+</div>
+<div id="printRoot"></div>
+
+<script>
+"use strict";
+/* ================= 气候数据（内置 ASHRAE 设计工况，发布前请复核） ================= */
+const LOCATIONS={
+  los_angeles:{name:"洛杉矶 CA（沿海）",zone:"3B",db04:29.4,rng:7.0,dew:15.0,w996:7.2,wrng:5.0,solar:2400},
+  fresno:{name:"弗雷斯诺 CA（内陆）",zone:"3B",db04:40.0,rng:17.0,dew:12.0,w996:-0.6,wrng:8.0,solar:3000},
+  houston:{name:"休斯顿 TX",zone:"2A",db04:36.1,rng:10.0,dew:23.5,w996:-1.1,wrng:7.0,solar:2600},
+  dallas:{name:"达拉斯 TX",zone:"3A",db04:38.9,rng:11.0,dew:21.0,w996:-6.1,wrng:8.0,solar:2800},
+  miami:{name:"迈阿密 FL",zone:"1A",db04:33.3,rng:6.7,dew:24.0,w996:8.9,wrng:6.0,solar:2500},
+  orlando:{name:"奥兰多 FL",zone:"2A",db04:34.4,rng:9.0,dew:23.5,w996:3.9,wrng:7.0,solar:2500},
+  boston:{name:"波士顿 MA",zone:"5A",db04:32.8,rng:8.9,dew:19.0,w996:-13.9,wrng:6.0,solar:2300},
+  new_york:{name:"纽约 NY",zone:"4A",db04:32.8,rng:7.5,dew:20.0,w996:-10.6,wrng:6.0,solar:2300},
+};
+const INS={poor:{ua:520,ach:1.0},medium:{ua:350,ach:0.6},good:{ua:230,ach:0.35}};
+function scenParams(loc,scen){
+  if(scen==="summer_design")  return {mode:"cooling",tmean:loc.db04-loc.rng/2,tamp:loc.rng/2,dew:loc.dew,solar:loc.solar/1000};
+  if(scen==="summer_typical") return {mode:"cooling",tmean:loc.db04-4-loc.rng/2,tamp:loc.rng/2,dew:loc.dew-1,solar:loc.solar*0.85/1000};
+  if(scen==="winter_design")  return {mode:"heating",tmean:loc.w996+loc.wrng/2,tamp:loc.wrng/2,dew:Math.min(loc.w996-2,0),solar:loc.solar*0.45/1000};
+  return {mode:"heating",tmean:loc.w996+6+loc.wrng/2,tamp:loc.wrng/2,dew:Math.min(loc.w996+4,2),solar:loc.solar*0.5/1000};
+}
+/* ================= 湿空气性质 ================= */
+const psat=t=>610.94*Math.exp(17.625*t/(t+243.04));
+const wFromDew=d=>{const pv=psat(d);return 0.622*pv/(101325-pv);};
+const wSat=t=>{const pv=psat(t);return 0.622*pv/(101325-pv);};
+const rhFromW=(t,w)=>{const pv=w*101325/(0.622+w);return Math.max(0,Math.min(1,pv/psat(t)));};
+const dewFromW=w=>{const pv=Math.max(1,w*101325/(0.622+w));const x=Math.log(pv/610.94);return 243.04*x/(17.625-x);};
+const enth=(t,w)=>1006*t+w*(2.501e6+1860*t);
+const HFG=2.45e6, RHO=1.2, CP=1006, TON=3517, DAY=86400, DT=10;
+
+/* ================= 参数 ================= */
+const P={
+  loc:"houston", scen:"summer_typical", mode:"cooling",
+  tmean:30, tamp:5, dew:22.5, solar:2.2,
+  ins:"medium", ua:350, ach:0.6, vent:0, qint:300, mgain:0.3,
+  tons:3, qr:3*3.517, sat:100, bias:0, aux:8,
+  cfm:400, fanCtrl:"fixed", twoStage:2,
+  autoInit:60, autoWait:50, autoInt:10, autoStep:10, fan:"auto",
+  fstart:30, hold:180, ramp:0.5, fmax:65,
+  tset:24.5, db:1.0,
+  algo:"C", tgtb:7,
+  ta:60, dz:20, rate:0.1, cyc:1.0, pre:true,
+};
+const P0=JSON.parse(JSON.stringify(P));   // 出厂默认值快照（智能助手"未提及变量取默认值"的依据）
+const TES_NOM=7,TES_MIN=4,TES_MAX=14,TCS_NOM=45,TCS_MIN=38,TCS_MAX=52;
+const nomTgt=()=>P.mode==="cooling"?TES_NOM:TCS_NOM;
+const tgtLims=()=>P.mode==="cooling"?[TES_MIN,TES_MAX]:[TCS_MIN,TCS_MAX];
+
+function outdoorTemp(t){ return P.tmean+P.tamp*Math.cos(2*Math.PI*(t/DAY-15/24)); }
+function solarGain(t){
+  const h=(t%DAY)/3600;
+  if(h<=6.5||h>=19.5)return 0;
+  return P.solar*1000*Math.sin(Math.PI*(h-6.5)/13);
+}
+function designLoad(){
+  // 湿源三路、单位各自物理：渗透(ACH×室外露点)、新风(m³/h×室外露点)、产湿(kg/h)
+  const dT=Math.max(2,(P.tmean+P.tamp)-P.tset);
+  const mVent=P.vent/3600*RHO;
+  const sens=P.ua*dT+0.5*P.solar*1000+P.qint+mVent*CP*dT;
+  const mInf=P.ach*160*2.7*RHO/3600;
+  const lat=Math.max(0,(mInf+mVent)*(wFromDew(P.dew)-0.0104)*HFG)+P.mgain/3600*HFG;
+  const heat=Math.max(500,(P.ua+mVent*CP)*(21.1-(P.tmean-P.tamp)));
+  return {sens,lat,total:sens+lat,heat,ventH:mVent*CP*Math.max(0,21.1-(P.tmean-P.tamp))};
+}
+function loadScale(){
+  // 负荷满足度锚定：只缩放显热源（UA/日照/内扰显热）；湿源保持物理面值。
+  // 缩放系数 = (额定能力/满足度 − 设计潜热) / 设计显热（制热扣新风显热）。
+  const dl=designLoad();
+  if(P.mode==="cooling"){
+    const target=P.qr*1000/(P.sat/100);
+    return Math.max(0.1,Math.min(10,(target-dl.lat)/Math.max(dl.sens,1)));
+  }
+  const target=P.qr*1000*1.09/(P.sat/100);
+  const envH=Math.max(dl.heat-dl.ventH,1);
+  return Math.max(0.1,Math.min(10,(target-dl.ventH)/envH));
+}
+function prelearnQ(){
+  const LS=loadScale();
+  const mVent=P.vent/3600*RHO;
+  if(P.mode==="cooling"){
+    const solarAvg=P.solar*1000*(2/Math.PI)*13/24;
+    const mInf=P.ach*160*2.7*RHO/3600;
+    const lat=Math.max(0,(mInf+mVent)*(wFromDew(P.dew)-0.0104)*HFG)+P.mgain/3600*HFG;
+    const dT=Math.max(1,P.tmean-P.tset);
+    return Math.max(600,(P.ua*dT+solarAvg+P.qint)*LS+mVent*CP*dT+lat);
+  }
+  return Math.max(600,(P.ua*LS+mVent*CP)*Math.max(1,P.tset-P.tmean)*0.9);
+}
+
+/* ================= V1.44 学习器 ================= */
+const C_EDGES=[0,5,10,13,16,19,22,25,28,31,34,37,40,43,46];
+const H_EDGES=[-20,-17,-14,-11,-8,-5,-2,1,4,7,10,13,16,19,22];
+function tempBin(t){const e=P.mode==="cooling"?C_EDGES:H_EDGES;
+  for(let i=0;i<e.length;i++)if(t<e[i])return i+1; return 16;}
+function binRange(b){const e=P.mode==="cooling"?C_EDGES:H_EDGES;
+  if(b===1)return "<"+e[0]; if(b===16)return "≥"+e[e.length-1];
+  return e[b-2]+"~"+e[b-1];}
+const isDay=t=>{const h=(t%DAY)/3600;return h>=7&&h<19;};
+
+class BinStore{
+  constructor(pre){this.samples=[];this.coeff=null;this.lo=0;this.hi=0;
+    if(pre!=null){for(let i=0;i<7;i++)this.samples.push(pre*(1+0.30*(i/6-0.5)));this.recompute();}}
+  recompute(){
+    const d=this.samples;
+    if(d.length<7){this.coeff=null;return;}
+    let best=d[0],bs=Infinity;
+    for(const a of d){let s=0;for(const b of d)s+=Math.abs(a-b);if(s<bs){bs=s;best=a;}}
+    const keep=Math.max(1,Math.floor(d.length*0.7));
+    const kept=[...d].sort((x,y)=>Math.abs(x-best)-Math.abs(y-best)).slice(0,keep);
+    const c=kept.reduce((a,b)=>a+b,0)/kept.length;
+    this.coeff=c;
+    this.hi=(Math.max(...kept)-c)*1.2+c;
+    this.lo=(Math.min(...kept)-c)*1.2+c;
+  }
+  add(q){
+    if(this.coeff===null){
+      this.samples.push(q);if(this.samples.length>21)this.samples.shift();
+      this.recompute();return;
+    }
+    if(q>=this.lo&&q<=this.hi){
+      let far=this.samples[0],fd=-1;
+      for(const s of this.samples){const d2=Math.abs(s-this.coeff);if(d2>fd){fd=d2;far=s;}}
+      this.samples.splice(this.samples.indexOf(far),1);
+      this.samples.push(q);this.recompute();
+    }
+  }
+}
+class V144{
+  constructor(preQ){
+    this.bins=new Map();this.tgtStore=new Map();this.preQ=preQ;
+    this.upDir=P.mode==="cooling"?-1:1;
+    this.tgt=nomTgt();this.callPrev=false;this.started=false;
+    this.tOn=0;this.tOff=0;this.t1=0;this.entryBin=1;this.cycTgt0=this.tgt;
+    this.cycE=0;this.offInt=0;this.offKnown=true;this.target=null;
+    this.taEff=0;this.nextEval=0;this.sigUp=false;this.sigDown=false;this.ratio=null;
+  }
+  store(b,day){
+    const k=b+(day?"-d":"-n");
+    if(!this.bins.has(k))this.bins.set(k,new BinStore(this.preQ));
+    return this.bins.get(k);
+  }
+  qCoeff(tout,t){return this.store(tempBin(tout),isDay(t)).coeff;}
+  update(t,dt,call,tout,qmeas){
+    if(!this.started){this.started=true;this.callPrev=call;if(call)this.tOn=t;else this.tOff=t;}
+    if(call&&!this.callPrev)this.thermoOn(t,tout);
+    else if(!call&&this.callPrev)this.thermoOff(t,tout);
+    this.callPrev=call;
+    if(!call){
+      const q=this.qCoeff(tout,t);
+      if(q===null)this.offKnown=false;else this.offInt+=q*dt;
+      return this.tgt;
+    }
+    const run=t-this.tOn;
+    if(run>=180){
+      this.cycE+=qmeas*dt;
+      if(this.target!==null&&t>=this.nextEval){this.nextEval=t+20;this.evaluate(run,qmeas);}
+    }
+    if(this.sigUp)this.tgt+=this.upDir*P.rate*dt/60;
+    else if(this.sigDown)this.tgt-=this.upDir*P.rate*dt/60;
+    const [gl,gh]=tgtLims();
+    const lo=Math.max(gl,this.cycTgt0-P.cyc),hi=Math.min(gh,this.cycTgt0+P.cyc);
+    this.tgt=Math.min(hi,Math.max(lo,this.tgt));
+    return this.tgt;
+  }
+  thermoOn(t,tout){
+    const b=tempBin(tout);
+    this.entryBin=b;
+    this.tgt=this.tgtStore.has(b)?this.tgtStore.get(b):nomTgt();
+    this.cycTgt0=this.tgt;
+    this.tOn=t;this.t1=t-this.tOff;this.cycE=0;this.nextEval=t+20;
+    this.sigUp=this.sigDown=false;this.taEff=P.ta*60;
+    const q=this.qCoeff(tout,t);
+    if(q!==null&&this.offKnown){
+      let l1=this.offInt;
+      if(this.t1>7200)l1*=7200/Math.max(this.t1,1);
+      this.target=l1+q*P.ta*60;
+    }else this.target=null;
+  }
+  thermoOff(t,tout){
+    const t2=t-this.tOn;
+    if(this.target!==null)this.tgtStore.set(this.entryBin,this.tgt);
+    const t0=this.t1+t2;
+    if(this.t1>=300&&this.t1<7200&&t2>=300&&t2<14400&&t0>0){
+      const attr=this.t1>=t2?this.tOff:t;
+      this.store(tempBin(tout),isDay(attr)).add(this.cycE/t0);
+    }
+    this.tOff=t;this.offInt=0;this.offKnown=true;this.target=null;
+    this.sigUp=this.sigDown=false;this.ratio=null;
+  }
+  evaluate(run,qmeas){
+    if(run>=14400){this.sigUp=this.sigDown=false;return;}
+    while(run>=this.taEff)this.taEff+=600;
+    const pred=this.cycE+qmeas*(this.taEff-run);
+    const r=pred/Math.max(this.target,1);
+    this.ratio=r;
+    const hi=1+P.dz/100,lo=1-P.dz/100,hiOff=1+P.dz/200,loOff=1-P.dz/200;
+    if(r>=hi){this.sigDown=true;this.sigUp=false;}
+    else if(r<=lo){this.sigUp=true;this.sigDown=false;}
+    else{
+      if(this.sigDown&&r<hiOff)this.sigDown=false;
+      if(this.sigUp&&r>loOff)this.sigUp=false;
+    }
+  }
+}
+
+/* ================= 仿真状态 ================= */
+let S;
+const DEV={copRated:3.3,copRatedH:3.6,copFix:3.0,qHfac:1.09,fMin:20,fRated:60,ki:0.02,
+  bf400:0.15,fanWcfm:0.35,kqC:0.010,keC:0.020,kqH:0.022,keH:0.090,
+  dtC:19.7,dtHoff:10,dtHk:14,tau:45,defInt:3000,defDur:480,coilMax:0.40};
+
+function makeAlgo(){return P.algo==="C"?new V144(P.pre?prelearnQ():null):null;}
+function algoTarget(t,dt,call,tout,qmeas){
+  if(P.algo==="A")return nomTgt();
+  if(P.algo==="B")return P.tgtb;
+  return S.algo.update(t,dt,call,tout,qmeas);
+}
+function resetAll(){
+  const cool=P.mode==="cooling";
+  S={t:12*3600,
+     tr:cool?P.tset+1.5:P.tset-1.5, tm:cool?P.tset+0.5:P.tset-0.5,
+     w:cool?wFromDew(Math.min(P.dew,P.tset-3)):wFromDew(2),
+     call:false,thS:-1e9,thSw:-1e9,prevCall:false,
+     fHz:0,qDel:0,runT:0,offT:1e9,coilW:0,frost:0,defLeft:0,auxOn:false,
+     te:7,tc:40,shr:1,fanPct:1,
+     algo:makeAlgo(),
+     buf:{t:[],tr:[],tout:[],q:[],tgt:[],lo:[],hi:[],call:[],rh:[],hz:[],def:[],fan:[]},nextBuf:0,
+     cycles:[],cur:null,pulldown:null,t0:12*3600,
+     energy:0,aux:0,cool:0,lat:0,dehum:0,sq:0,n:0,oob:0,rhSum:0,rhOver:0,defCount:0,defPrev:false};
+  refreshAll();
+}
+function resetStats(keepAlgo){
+  // keepAlgo：只清统计、保留已学到的分箱负荷系数与 Tes/Tcs（智能助手预热后用，
+  // 否则预热只暖了房子、算法学到的东西被丢弃，测量段又从零学起）
+  if(!keepAlgo)S.algo=makeAlgo();
+  S.cycles=[];S.cur=null;S.pulldown=null;S.t0=S.t;
+  S.energy=0;S.aux=0;S.cool=0;S.lat=0;S.dehum=0;S.sq=0;S.n=0;S.oob=0;
+  S.rhSum=0;S.rhOver=0;S.defCount=0;
+}
+
+function fanPctNow(){
+  // 三种内机风量模式（基于当前循环运转时长 S.runT）
+  if(P.fanCtrl==="two")return P.twoStage===1?0.70:1.0;
+  if(P.fanCtrl==="auto"){
+    if(S.runT<P.autoWait*60)return P.autoInit/100;
+    const steps=1+Math.floor((S.runT-P.autoWait*60)/(P.autoInt*60));
+    return Math.min(1,P.autoInit/100+(P.autoStep/100)*steps);
+  }
+  return 1.0;
+}
+function deviceStep(dt,call,tout,wout,target){
+  const cool=P.mode==="cooling";
+  const ffTons=P.qr*1000/TON;
+  const variable=P.algo!=="A";
+  // 风量与派生量在各分支内（runT 更新后）计算
+  const fanDerived=()=>{
+    S.fanPct=fanPctNow();
+    const ff=P.cfm*S.fanPct/400;
+    return {ff,capFF:1+0.35*(ff-1),
+            fanW:P.cfm*ffTons*DEV.fanWcfm*Math.pow(S.fanPct,3)};
+  };
+  if(cool){
+    if(call){
+      S.offT=0;
+      if(S.fHz<=0){S.fHz=P.fstart;S.runT=0;}
+      S.runT+=dt;
+      const {ff,capFF,fanW}=fanDerived();
+      const capFT=1+DEV.kqC*(35-tout);
+      const qSS=P.qr*1000*Math.pow(S.fHz/DEV.fRated,0.95)*capFT*capFF;
+      S.te=S_tr()-DEV.dtC*(qSS/(P.qr*1000))/ff;
+      if(variable){
+        if(S.runT>=P.hold){
+          let df=DEV.ki*(S.te-target)*dt;
+          df=Math.max(-P.ramp*dt,Math.min(P.ramp*dt,df));
+          S.fHz=Math.max(DEV.fMin,Math.min(P.fmax,S.fHz+df));
+        }
+      }else S.fHz=Math.min(DEV.fRated,S.fHz+P.ramp*2*dt);
+      S.qDel+=(qSS-S.qDel)/DEV.tau*dt;
+      const adp=S.te+2, wAdp=wSat(adp);
+      if(wAdp>=S.w)S.shr=1;
+      else{
+        const bf=Math.pow(DEV.bf400,1/ff);
+        const tSup=adp+bf*(S_tr()-adp), wSup=wAdp+bf*(S.w-wAdp);
+        const dh=enth(S_tr(),S.w)-enth(tSup,wSup);
+        S.shr=Math.min(1,Math.max(0.3,CP*(S_tr()-tSup)/Math.max(dh,1)));
+      }
+      const qs=S.qDel*S.shr, ql=S.qDel*(1-S.shr);
+      S.coilW=Math.min(DEV.coilMax,S.coilW+ql/HFG*dt);
+      let cop=(variable?DEV.copRated:DEV.copFix)*(1+DEV.keC*(35-tout));
+      if(variable){
+        cop*=(1+0.028*(S.te-7));
+        cop*=Math.max(0.9,Math.min(1.12,1+0.10*(1-S.fHz/DEV.fRated)));
+      }
+      return {qs,lat:ql,reevap:0,power:qSS/Math.max(cop,0.5)+fanW,auxW:0};
+    }
+    S.fHz=0;S.runT=0;S.offT+=dt;
+    S.qDel+=(0-S.qDel)/DEV.tau*dt;
+    if(S.qDel<1)S.qDel=0;
+    let reevap=0;
+    const fanRun=(P.fan==="on")||(S.offT<=90);
+    const fanWOff=P.cfm*ffTons*DEV.fanWcfm*Math.pow(S.fanPct,3);
+    if(fanRun&&S.coilW>1e-4){
+      let rate=S.coilW/(P.fan==="on"?600:90);
+      rate=Math.min(rate,S.coilW/dt);
+      S.coilW-=rate*dt;
+      reevap=rate*HFG;
+    }
+    return {qs:0,lat:0,reevap,power:fanRun?fanWOff:0,auxW:0};
+  }
+  // ---- 制热 ----
+  if(!call){
+    S.fHz=0;S.runT=0;
+    S.qDel+=(0-S.qDel)/DEV.tau*dt;
+    S.auxOn=false;
+    return {qs:0,lat:0,reevap:0,power:0,auxW:0};
+  }
+  const dewOut=wout>1e-5?dewFromW(wout):-30;
+  const humidCold=(tout<5)&&(tout-dewOut<6);
+  if(S.defLeft>0){
+    S.defLeft-=dt;
+    const power=0.5*P.qr*1000*DEV.qHfac/3;
+    return {qs:0,lat:0,reevap:0,power,auxW:auxHeat(dt,true)};
+  }
+  if(S.fHz<=0){S.fHz=P.fstart;S.runT=0;}
+  S.runT+=dt;
+  const {ff,capFF,fanW}=fanDerived();
+  if(humidCold){
+    S.frost+=(tout>-7?1:0.4)*dt;
+    if(S.frost>=DEV.defInt){S.frost=0;S.defLeft=DEV.defDur;}
+  }
+  const qrh=P.qr*1000*DEV.qHfac;
+  const capFT=Math.max(0.35,Math.min(1.15,1+DEV.kqH*(tout-8.3)));
+  const qSS=qrh*Math.pow(S.fHz/DEV.fRated,0.95)*capFT*capFF;
+  S.tc=S_tr()+DEV.dtHoff+DEV.dtHk*(qSS/qrh)/ff;
+  const variable2=P.algo!=="A";
+  if(variable2){
+    if(S.runT>=P.hold){
+      let df=DEV.ki*(target-S.tc)*dt;
+      df=Math.max(-P.ramp*dt,Math.min(P.ramp*dt,df));
+      S.fHz=Math.max(DEV.fMin,Math.min(P.fmax,S.fHz+df));
+    }
+  }else S.fHz=Math.min(DEV.fRated,S.fHz+P.ramp*2*dt);
+  S.qDel+=(qSS-S.qDel)/DEV.tau*dt;
+  let cop=DEV.copRatedH+DEV.keH*(tout-8.3)-0.05*(S.tc-45);
+  cop=Math.max(1.3,Math.min(5.5,cop));
+  const auxW=auxHeat(dt,false);
+  return {qs:-(S.qDel+auxW),lat:0,reevap:0,power:qSS/cop+fanW,auxW};
+}
+function auxHeat(dt,defrosting){
+  if(P.aux<=0)return 0;
+  if(defrosting)return P.aux*1000;
+  if(S.auxOn){if(S_tr()>=P.tset-0.5)S.auxOn=false;}
+  else{if(S_tr()<=P.tset-1.5)S.auxOn=true;}
+  return S.auxOn?P.aux*1000:0;
+}
+const S_tr=()=>S.tr;
+
+function stepOnce(){
+  const LS=loadScale();   // 满足度锚定的负荷缩放
+  const t=S.t, tout=outdoorTemp(t), qsol=solarGain(t)*LS, wout=wFromDew(P.dew);
+  const dbC=P.db*5/9, cool=P.mode==="cooling";
+  // 温控器
+  if(t-S.thS>=60){
+    S.thS=t;
+    const hi=P.tset+dbC/2, lo=P.tset-dbC/2;
+    if(cool){
+      if(S.call){if(S.tr<=lo&&t-S.thSw>=180){S.call=false;S.thSw=t;}}
+      else if(S.tr>=hi&&t-S.thSw>=300){S.call=true;S.thSw=t;}
+    }else{
+      if(S.call){if(S.tr>=hi&&t-S.thSw>=180){S.call=false;S.thSw=t;}}
+      else if(S.tr<=lo&&t-S.thSw>=300){S.call=true;S.thSw=t;}
+    }
+  }
+  const call=S.call;
+  const qmeas=(call&&S.defLeft<=0)?S.qDel*(1+P.bias/100):0;
+  const tgt=algoTarget(t,DT,call,tout,qmeas);
+  const out=deviceStep(DT,call,tout,wout,tgt);
+  // 房间（2R2C + 湿平衡）。满足度只缩放显热源；湿源（渗透/新风/产湿）保持物理面值
+  const mVent=P.vent/3600*RHO;
+  const gains=qsol+P.qint*LS;
+  const dqa=P.ua*LS*(tout-S.tr)+mVent*CP*(tout-S.tr)+500*(S.tm-S.tr)+0.4*gains-out.qs;
+  const dqm=500*(S.tr-S.tm)+0.6*gains;
+  S.tr+=dqa/3.0e6*DT;
+  S.tm+=dqm/40.0e6*DT;
+  const mInf=P.ach*160*2.7*RHO/3600;
+  const dw=((mInf+mVent)*(wout-S.w)+P.mgain/3600-out.lat/HFG+out.reevap/HFG)/(RHO*160*2.7*15);
+  S.w=Math.max(0.001,S.w+dw*DT);
+  // 循环事件
+  if(call&&!S.prevCall){S.cur={tOn:t,t2:0,t1:0,hzPeak:0,hwm:[],hz95:null};S.cycles.push(S.cur);
+    if(S.cycles.length>400)S.cycles.shift();}
+  else if(!call&&S.prevCall){
+    if(S.cur){S.cur.t2=t-S.cur.tOn;
+      const th=0.95*S.cur.hzPeak;
+      S.cur.hz95=(S.cur.hwm.find(x=>x[1]>=th)||[null])[0];}
+    if(S.pulldown===null)S.pulldown=t-S.t0;
+  }
+  if(!call&&S.cur&&S.cur.t2>0)S.cur.t1=t-(S.cur.tOn+S.cur.t2);
+  if(call&&S.cur&&S.fHz>S.cur.hzPeak){S.cur.hzPeak=S.fHz;S.cur.hwm.push([t-S.cur.tOn,S.fHz]);}
+  S.prevCall=call;
+  // 化霜计数
+  const defr=S.defLeft>0;
+  if(defr&&!S.defPrev)S.defCount++;
+  S.defPrev=defr;
+  // 指标
+  const power=out.power+out.auxW;
+  S.energy+=power*DT/3.6e6;
+  S.aux+=out.auxW*DT/3.6e6;
+  S.cool+=Math.abs(out.qs)*DT/3.6e6;
+  S.lat+=out.lat*DT/3.6e6;
+  S.dehum+=(out.lat-out.reevap)/HFG*DT;
+  const err=S.tr-P.tset;
+  S.sq+=err*err;S.n++;
+  if(Math.abs(err)>dbC)S.oob++;
+  const rh=rhFromW(S.tr,S.w);
+  S.rhSum+=rh;if(rh>0.60)S.rhOver++;
+  // 缓冲
+  if(t>=S.nextBuf){
+    const b=S.buf;
+    b.t.push(t);b.tr.push(S.tr);b.tout.push(tout);
+    b.q.push(Math.abs(out.qs)/1000);b.tgt.push(P.algo==="A"?nomTgt():tgt);
+    b.lo.push(P.tset-dbC/2);b.hi.push(P.tset+dbC/2);
+    b.call.push(call?1:0);b.rh.push(rh*100);b.hz.push(S.fHz);b.def.push(defr?1:0);
+    b.fan.push(call?Math.round(S.fanPct*100):0);
+    if(b.t.length>20160)for(const k in b)b[k].splice(0,1440);
+    S.nextBuf=t+60;
+  }
+  S.t+=DT;
+}
+
+/* ================= 图表 ================= */
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let winLen=86400;
+function setupCanvas(cv){
+  const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+  if(cv.width!==Math.round(r.width*dpr)){cv.width=Math.round(r.width*dpr);
+    cv.height=Math.round(parseInt(cv.getAttribute("height"))*dpr);}
+  const ctx=cv.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w:r.width,h:parseInt(cv.getAttribute("height"))};
+}
+function niceTicks(lo,hi,n){
+  const span=hi-lo||1,step0=span/n,mag=Math.pow(10,Math.floor(Math.log10(step0)));
+  let step=mag;for(const m of [1,2,2.5,5,10])if(step0<=m*mag){step=m*mag;break;}
+  const t0=Math.ceil(lo/step)*step,out=[];
+  for(let v=t0;v<=hi+1e-9;v+=step)out.push(v);
+  return out;
+}
+function fmtClock(t){
+  const d=Math.floor(t/DAY)+1,h=Math.floor((t%DAY)/3600),m=Math.floor((t%3600)/60);
+  return "第"+d+"天 "+String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
+}
+function windowRange(){
+  const b=S.buf;if(!b.t.length)return [0,1,0,0];
+  const tEnd=b.t[b.t.length-1];
+  const tStart=winLen===0?b.t[0]:Math.max(b.t[0],tEnd-winLen);
+  let lo=0,hi=b.t.length-1;
+  while(lo<hi){const mid=(lo+hi)>>1;if(b.t[mid]<tStart)lo=mid+1;else hi=mid;}
+  return [tStart,Math.max(tEnd,tStart+600),lo,b.t.length-1];
+}
+const PADL=44,PADR=10,PADT=8,PADB=20;
+function drawFrame(ctx,w,h,t0,t1,ylo,yhi,yfmt){
+  ctx.clearRect(0,0,w,h);
+  ctx.font="10px system-ui";ctx.fillStyle=css("--muted");
+  ctx.strokeStyle=css("--grid");ctx.lineWidth=1;
+  const X=t=>PADL+(t-t0)/(t1-t0)*(w-PADL-PADR);
+  const Y=v=>h-PADB-(v-ylo)/(yhi-ylo)*(h-PADT-PADB);
+  for(const v of niceTicks(ylo,yhi,4)){
+    const y=Y(v);
+    ctx.beginPath();ctx.moveTo(PADL,y);ctx.lineTo(w-PADR,y);ctx.stroke();
+    ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(yfmt(v),PADL-5,y);
+  }
+  const span=t1-t0;
+  const tick=span<=6*3600?3600:span<=DAY?4*3600:span<=3*DAY?12*3600:DAY;
+  ctx.textAlign="center";ctx.textBaseline="top";
+  for(let tt=Math.ceil(t0/tick)*tick;tt<=t1;tt+=tick){
+    const x=X(tt);
+    ctx.beginPath();ctx.moveTo(x,h-PADB);ctx.lineTo(x,h-PADB+3);
+    ctx.strokeStyle=css("--axis");ctx.stroke();ctx.strokeStyle=css("--grid");
+    const lab=tick>=DAY?("第"+(Math.floor(tt/DAY)+1)+"天"):(Math.floor((tt%DAY)/3600)+":00");
+    ctx.fillText(lab,x,h-PADB+5);
+  }
+  ctx.strokeStyle=css("--axis");
+  ctx.beginPath();ctx.moveTo(PADL,h-PADB);ctx.lineTo(w-PADR,h-PADB);ctx.stroke();
+  return {X,Y};
+}
+function drawLine(ctx,b,key,X,Y,i0,i1,color,width){
+  ctx.strokeStyle=color;ctx.lineWidth=width||2;ctx.beginPath();
+  const step=Math.max(1,Math.floor((i1-i0)/1200));
+  let first=true;
+  for(let i=i0;i<=i1;i+=step){
+    const x=X(b.t[i]),y=Y(b[key][i]);
+    if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+}
+function drawBandRange(ctx,b,X,Y,i0,i1,loK,hiK,fill){
+  ctx.fillStyle=fill;ctx.beginPath();
+  const step=Math.max(1,Math.floor((i1-i0)/1200));
+  let first=true;
+  for(let i=i0;i<=i1;i+=step){const x=X(b.t[i]),y=Y(b[hiK][i]);
+    if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);}
+  for(let i=i1;i>=i0;i-=step)ctx.lineTo(X(b.t[i]),Y(b[loK][i]));
+  ctx.closePath();ctx.fill();
+}
+function drawFlagBand(ctx,b,key,X,i0,i1,h,fill){
+  ctx.fillStyle=fill;
+  let start=null;
+  for(let i=i0;i<=i1;i++){
+    if(b[key][i]&&start===null)start=b.t[i];
+    if((!b[key][i]||i===i1)&&start!==null){
+      ctx.fillRect(X(start),PADT,Math.max(1,X(b.t[i])-X(start)),h-PADT-PADB);
+      start=null;
+    }
+  }
+}
+function yBounds(b,keys,i0,i1,pad){
+  let lo=Infinity,hi=-Infinity;
+  for(const k of keys)for(let i=i0;i<=i1;i++){const v=b[k][i];if(v<lo)lo=v;if(v>hi)hi=v;}
+  if(!isFinite(lo)){lo=0;hi=1;}
+  const p=(hi-lo)*pad||1;
+  return [lo-p,hi+p];
+}
+function renderCharts(){
+  const b=S.buf;if(b.t.length<2)return;
+  const [t0,t1,i0,i1]=windowRange();
+  {const {ctx,w,h}=setupCanvas(document.getElementById("chTemp"));
+   const [ylo,yhi]=yBounds(b,["tr","tout","lo","hi"],i0,i1,0.08);
+   const {X,Y}=drawFrame(ctx,w,h,t0,t1,ylo,yhi,v=>v.toFixed(0)+"°");
+   drawBandRange(ctx,b,X,Y,i0,i1,"lo","hi",css("--band"));
+   drawLine(ctx,b,"tout",X,Y,i0,i1,css("--s-out"),1.6);
+   drawLine(ctx,b,"tr",X,Y,i0,i1,css("--s-room"),2);}
+  {const {ctx,w,h}=setupCanvas(document.getElementById("chRh"));
+   const [ylo,yhi]=yBounds(b,["rh"],i0,i1,0.15);
+   const {X,Y}=drawFrame(ctx,w,h,t0,t1,Math.min(ylo,40),Math.max(yhi,70),v=>v.toFixed(0)+"%");
+   ctx.setLineDash([4,4]);ctx.strokeStyle=css("--muted");ctx.lineWidth=1;
+   ctx.beginPath();ctx.moveTo(PADL,Y(60));ctx.lineTo(w-PADR,Y(60));ctx.stroke();ctx.setLineDash([]);
+   drawLine(ctx,b,"rh",X,Y,i0,i1,css("--s-rh"),2);}
+  {const {ctx,w,h}=setupCanvas(document.getElementById("chHz"));
+   const {X,Y}=drawFrame(ctx,w,h,t0,t1,0,Math.max(P.fmax+5,70),v=>v.toFixed(0));
+   drawFlagBand(ctx,b,"call",X,i0,i1,h,css("--callband"));
+   drawFlagBand(ctx,b,"def",X,i0,i1,h,css("--defband"));
+   drawLine(ctx,b,"hz",X,Y,i0,i1,css("--s-hz"),1.8);}
+  {const {ctx,w,h}=setupCanvas(document.getElementById("chCap"));
+   const [,yhi]=yBounds(b,["q"],i0,i1,0.15);
+   const {X,Y}=drawFrame(ctx,w,h,t0,t1,0,Math.max(yhi,1),v=>v.toFixed(0));
+   ctx.fillStyle=css("--s-cap")+"33";
+   ctx.beginPath();
+   const step=Math.max(1,Math.floor((i1-i0)/1200));
+   ctx.moveTo(X(b.t[i0]),Y(0));
+   for(let i=i0;i<=i1;i+=step)ctx.lineTo(X(b.t[i]),Y(b.q[i]));
+   ctx.lineTo(X(b.t[i1]),Y(0));ctx.closePath();ctx.fill();
+   drawLine(ctx,b,"q",X,Y,i0,i1,css("--s-cap"),1.6);}
+  {const {ctx,w,h}=setupCanvas(document.getElementById("chTgt"));
+   const cool=P.mode==="cooling";
+   const {X,Y}=drawFrame(ctx,w,h,t0,t1,cool?3.5:36,cool?14.5:53,v=>v.toFixed(0)+"°");
+   drawLine(ctx,b,"tgt",X,Y,i0,i1,css("--s-tgt"),2);}
+  renderCycles();
+}
+function renderCycles(){
+  const {ctx,w,h}=setupCanvas(document.getElementById("chCyc"));
+  const cs=S.cycles.filter(c=>c.t2>0).slice(-30);
+  ctx.clearRect(0,0,w,h);
+  if(!cs.length){S._cycGeom=null;return;}
+  let ymax=5;
+  for(const c of cs)ymax=Math.max(ymax,c.t2/60,c.t1/60);
+  ymax=Math.min(ymax,150);   // 截断 pull-down 超长循环，保持常规循环可读
+  const Y=v=>h-PADB-(Math.min(v,ymax)/(ymax*1.12))*(h-PADT-PADB);
+  ctx.font="10px system-ui";ctx.fillStyle=css("--muted");
+  ctx.strokeStyle=css("--grid");
+  for(const v of niceTicks(0,ymax*1.05,3)){
+    const y=Y(v);ctx.beginPath();ctx.moveTo(PADL,y);ctx.lineTo(w-PADR,y);ctx.stroke();
+    ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(v.toFixed(0),PADL-5,y);
+  }
+  const gw=(w-PADL-PADR)/cs.length,bw=Math.max(2,(gw-6)/2);
+  cs.forEach((c,i)=>{
+    const x=PADL+i*gw+3;
+    ctx.fillStyle=css("--s-room");
+    ctx.fillRect(x,Y(c.t2/60),bw,Y(0)-Y(c.t2/60));
+    ctx.fillStyle=css("--muted");
+    ctx.fillRect(x+bw+2,Y(c.t1/60),bw,Y(0)-Y(c.t1/60));
+  });
+  ctx.strokeStyle=css("--axis");ctx.beginPath();ctx.moveTo(PADL,Y(0));ctx.lineTo(w-PADR,Y(0));ctx.stroke();
+  S._cycGeom={cs,gw,Y};
+}
+
+/* ================= 悬浮读数 ================= */
+function bindHover(cvId,ttId,rows){
+  const cv=document.getElementById(cvId),tt=document.getElementById(ttId);
+  cv.addEventListener("mousemove",e=>{
+    const b=S.buf;if(b.t.length<2){tt.style.display="none";return;}
+    const r=cv.getBoundingClientRect();
+    const [t0,t1,i0,i1]=windowRange();
+    const frac=(e.clientX-r.left-PADL)/(r.width-PADL-PADR);
+    if(frac<0||frac>1){tt.style.display="none";return;}
+    const tq=t0+frac*(t1-t0);
+    let lo=i0,hi=i1;
+    while(lo<hi){const m=(lo+hi)>>1;if(b.t[m]<tq)lo=m+1;else hi=m;}
+    const i=lo;
+    tt.innerHTML='<div class="tt-t">'+fmtClock(b.t[i])+'</div>'+
+      rows.map(([lab,fn])=>'<div class="row"><span>'+lab+'</span><b>'+fn(i)+'</b></div>').join("");
+    tt.style.display="block";
+    tt.style.left=Math.min(e.clientX-r.left+14,r.width-160)+"px";
+    tt.style.top=Math.max(0,e.clientY-r.top-10)+"px";
+  });
+  cv.addEventListener("mouseleave",()=>tt.style.display="none");
+}
+bindHover("chTemp","ttTemp",[
+  ["室温",i=>S.buf.tr[i].toFixed(2)+" ℃"],
+  ["室外",i=>S.buf.tout[i].toFixed(1)+" ℃"],
+  ["设定带",i=>S.buf.lo[i].toFixed(2)+"~"+S.buf.hi[i].toFixed(2)+" ℃"],
+]);
+bindHover("chRh",  "ttRh", [["RH",i=>S.buf.rh[i].toFixed(1)+" %"]]);
+bindHover("chHz",  "ttHz", [["频率",i=>S.buf.hz[i].toFixed(1)+" Hz"],
+  ["内机风量",i=>S.buf.fan[i]?S.buf.fan[i]+" %":"—"],
+  ["状态",i=>S.buf.def[i]?"化霜":(S.buf.call[i]?"运转":"停机")]]);
+bindHover("chCap","ttCap",[["能力",i=>S.buf.q[i].toFixed(2)+" kW"]]);
+bindHover("chTgt","ttTgt",[["目标",i=>S.buf.tgt[i].toFixed(2)+" ℃"]]);
+document.getElementById("chCyc").addEventListener("mousemove",e=>{
+  const tt=document.getElementById("ttCyc"),g=S._cycGeom;
+  if(!g){tt.style.display="none";return;}
+  const r=e.currentTarget.getBoundingClientRect();
+  const i=Math.floor((e.clientX-r.left-PADL)/g.gw);
+  if(i<0||i>=g.cs.length){tt.style.display="none";return;}
+  const c=g.cs[i];
+  tt.innerHTML='<div class="tt-t">'+fmtClock(c.tOn)+' 起</div>'+
+    '<div class="row"><span>运转 t2</span><b>'+(c.t2/60).toFixed(1)+' min</b></div>'+
+    '<div class="row"><span>停机 t1</span><b>'+(c.t1/60).toFixed(1)+' min</b></div>'+
+    '<div class="row"><span>压缩机到峰值</span><b>'+(c.hz95===null?"—":(c.hz95/60).toFixed(1)+' min')+'</b></div>';
+  tt.style.display="block";
+  tt.style.left=Math.min(e.clientX-r.left+14,r.width-160)+"px";
+  tt.style.top=(e.clientY-r.top-10)+"px";
+});
+document.getElementById("chCyc").addEventListener("mouseleave",()=>document.getElementById("ttCyc").style.display="none");
+
+/* ================= 指标计算与 KPI ================= */
+function metrics(){
+  const days=Math.max((S.t-S.t0)/DAY,1e-6);
+  const done=S.cycles.filter(c=>c.t2>0),offc=S.cycles.filter(c=>c.t1>0);
+  const hz=done.filter(c=>c.hz95!==null);
+  const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
+  return {
+    days,
+    pd:S.pulldown===null?null:S.pulldown/60,
+    t2:mean(done.map(c=>c.t2))/60,
+    t1:mean(offc.map(c=>c.t1))/60,
+    period:mean(offc.map(c=>(c.t1+c.t2)))/60,
+    hz95:mean(hz.map(c=>c.hz95))/60,
+    cyc:S.cycles.length/days,
+    kwh:S.energy/days,
+    rmse:S.n?Math.sqrt(S.sq/S.n):NaN,
+    oob:S.n?S.oob/S.n*100:NaN,
+    rh:S.n?S.rhSum/S.n*100:NaN,
+    rh60:S.n?S.rhOver/S.n*100:NaN,
+    dehum:S.dehum/days,
+    defr:S.defCount/days,
+    auxk:S.aux/days,
+  };
+}
+const KPI_COOL=[["初始达温","pd","min",1],["平均运转 t2","t2","min",1],["平均停机 t1","t1","min",1],
+  ["达温间隔","period","min",1],["压缩机到峰值","hz95","min",1],["循环次数","cyc","/天",1],
+  ["耗电","kwh","kWh/天",1],["室温 RMSE","rmse","℃",2],["出带时间","oob","%",1],
+  ["RH 均值","rh","%",1],["RH>60%","rh60","%",0],["除湿量","dehum","L/天",1]];
+const KPI_HEAT=[["初始达温","pd","min",1],["平均运转 t2","t2","min",1],["平均停机 t1","t1","min",1],
+  ["达温间隔","period","min",1],["压缩机到峰值","hz95","min",1],["循环次数","cyc","/天",1],
+  ["耗电","kwh","kWh/天",1],["室温 RMSE","rmse","℃",2],["出带时间","oob","%",1],
+  ["化霜","defr","次/天",1],["辅热","auxk","kWh/天",1],["RH 均值","rh","%",1]];
+function buildKpis(){
+  const defs=P.mode==="cooling"?KPI_COOL:KPI_HEAT;
+  document.getElementById("kpis").innerHTML=defs.map(d=>
+    '<div class="kpi"><div class="k">'+d[0]+'</div><div class="v"><span data-k="'+d[1]+'">—</span><span class="u">'+d[2]+'</span></div></div>').join("");
+}
+function renderKpis(){
+  const m=metrics(),defs=P.mode==="cooling"?KPI_COOL:KPI_HEAT;
+  for(const [,key,,dec] of defs){
+    const el=document.querySelector('[data-k="'+key+'"]');
+    if(!el)continue;
+    const v=m[key];
+    el.textContent=(v===null||v!==v)?"—":(+v).toFixed(dec);
+  }
+}
+
+/* ================= V1.44 内部状态面板 ================= */
+function renderAlgoPanel(){
+  const panel=document.getElementById("algoPanel");
+  const isC=P.algo==="C";
+  panel.style.opacity=isC?1:0.45;
+  const pill=document.getElementById("sigPill");
+  const a=S.algo;
+  if(!isC||!a){pill.textContent="算法 "+P.algo;pill.className="state-pill";
+    document.getElementById("ratioTxt").textContent="—";
+    document.getElementById("ratioFill").style.width="0%";
+    document.getElementById("cycNow").textContent="V1.44 内部状态仅在算法 C 下有效。";
+    document.getElementById("binTable").innerHTML="";return;}
+  if(a.sigUp){pill.textContent="能力 UP";pill.className="state-pill up";}
+  else if(a.sigDown){pill.textContent="能力 DOWN";pill.className="state-pill down";}
+  else{pill.textContent="信号 —";pill.className="state-pill";}
+  const r=a.ratio;
+  document.getElementById("ratioTxt").textContent=r===null?"—":(r*100).toFixed(0)+"%";
+  document.getElementById("ratioFill").style.width=r===null?"0%":Math.min(100,r*50)+"%";
+  let now;
+  const tgtName=P.mode==="cooling"?"Tes":"Tcs";
+  if(S.call)now="运转中 "+((S.t-a.tOn)/60).toFixed(0)+" min · 当前 "+tgtName+" "
+    +a.tgt.toFixed(1)+"℃ · 目标总负荷 "+(a.target===null?"未学成（不发信号）":(a.target/3.6e6).toFixed(2)+" kWh");
+  else now="停机中 "+((S.t-a.tOff)/60).toFixed(0)+" min（t1 计时）";
+  document.getElementById("cycNow").textContent=now;
+  const rows=[];
+  for(let bin=1;bin<=16;bin++){
+    const d=a.bins.get(bin+"-d"),n=a.bins.get(bin+"-n");
+    const tv=a.tgtStore.get(bin);
+    if(!d&&!n&&tv===undefined)continue;
+    const cell=s=>s?(s.coeff===null?("采样"+s.samples.length+"/7"):"<b>"+(s.coeff/1000).toFixed(2)+"</b>"):"—";
+    rows.push("<tr><td>"+binRange(bin)+"℃</td><td>"+cell(d)+"</td><td>"+cell(n)
+      +"</td><td>"+(tv===undefined?"—":"<b>"+tv.toFixed(1)+"</b>")+"</td></tr>");
+  }
+  document.getElementById("binTable").innerHTML=
+    "<tr><th>区间</th><th>昼 q kW</th><th>夜 q kW</th><th>"+tgtName+" ℃</th></tr>"+
+    (rows.length?rows.join(""):"<tr><td colspan=4 style='text-align:center;color:var(--muted)'>尚无学习数据</td></tr>");
+}
+
+/* ================= 方案对比工作流 ================= */
+let records=[];
+try{records=JSON.parse(localStorage.getItem("acRecords")||"[]");}catch(e){records=[];}
+function saveRecords(){try{localStorage.setItem("acRecords",JSON.stringify(records));}catch(e){}}
+const REC_COLS=[["达温 t2","t2",1,true],["停机 t1","t1",1,false],["间隔","period",1,false],
+  ["到峰值","hz95",1,true],["循环/天","cyc",1,true],["kWh/天","kwh",1,true],
+  ["RMSE℃","rmse",2,true],["出带%","oob",1,true],["RH%","rh",1,true],
+  ["RH>60%","rh60",0,true],["除湿L/天","dehum",1,false],["辅热kWh","auxk",1,true],["化霜/天","defr",1,true]];
+function describeConfig(hours){
+  const fanDesc={fixed:"固定100%",two:"两档"+(P.twoStage===1?"·1档70%":"·2档"),
+    auto:"自动风("+P.autoInit+"%/"+P.autoWait+"min/+"+P.autoStep+"%每"+P.autoInt+"min)"}[P.fanCtrl];
+  return LOCATIONS[P.loc].name+" · "+({summer_design:"夏设计",summer_typical:"典夏",winter_design:"冬设计",winter_typical:"典冬"})[P.scen]
+    +" · "+P.algo+(P.algo==="C"?("(TA"+P.ta+")"):(P.algo==="B"?("(目标"+P.tgtb+"℃)"):""))
+    +" · "+P.tons+"Ton·满足度"+P.sat+"% · "+fanDesc
+    +" · 设定"+(+P.tset).toFixed(1)+"℃"
+    +(P.ins!=="medium"?" · 保温"+({poor:"差",medium:"中",good:"好"})[P.ins]:"")
+    +(P.cfm!==400?" · "+P.cfm+"CFM/Ton":"")
+    +(P.vent>0?" · 新风"+P.vent+"m³/h":"")
+    +(Math.abs(P.mgain-0.3)>1e-9?" · 产湿"+P.mgain+"kg/h":"")
+    +(P.bias!==0?" · 测量偏差"+P.bias+"%":"")
+    +" · 回差"+P.db+"°F · 统计"+hours.toFixed(1)+"h";
+}
+function makeRecord(name){
+  const m=metrics();
+  const rec={name,desc:describeConfig(m.days*24),baseline:false,m:{}};
+  for(const [,k] of REC_COLS)rec.m[k]=m[k]!==m[k]||m[k]===null?null:+m[k];
+  return rec;
+}
+function recordRun(){
+  const m=metrics();
+  if(m.days*24<2){document.getElementById("recHint").textContent="⚠ 统计时长不足 2 小时，先运行一段再记录";return;}
+  document.getElementById("recHint").textContent="";
+  const rec=makeRecord("方案"+(records.length+1));
+  rec.baseline=records.length===0;
+  records.push(rec);saveRecords();renderRecords();reportReady();
+}
+function renderRecords(){
+  const tbl=document.getElementById("recTable");
+  if(!records.length){tbl.innerHTML="<tr><td class='note'>尚无记录。设好参数 →「重置统计」→ 运行 →「记录当前运行为方案」。第一条记录自动成为基准。</td></tr>";return;}
+  const base=records.find(r=>r.baseline)||records[0];
+  let html="<tr><th>方案</th><th></th>"+REC_COLS.map(c=>"<th>"+c[0]+"</th>").join("")+"<th></th></tr>";
+  records.forEach((r,idx)=>{
+    html+="<tr><td><b>"+r.name+(r.baseline?" ★基准":"")+"</b><div class='note'>"+r.desc+"</div></td>";
+    html+="<td><button class='btn small' data-act='base' data-i='"+idx+"'>设基准</button></td>";
+    for(const [,k,dec,lowerBetter] of REC_COLS){
+      const v=r.m[k],bv=base.m[k];
+      if(v===null||v===undefined){html+="<td>—</td>";continue;}
+      let cell=(+v).toFixed(dec);
+      if(!r.baseline&&bv!==null&&bv!==undefined&&Math.abs(bv)>1e-9){
+        const d=v-bv,pct=d/Math.abs(bv)*100;
+        if(Math.abs(pct)>=1){
+          const good=lowerBetter?d<0:d>0;
+          cell+=" <span class='"+(good?"delta-good":"delta-bad")+"'>"+(d>0?"+":"")+pct.toFixed(0)+"%</span>";
+        }
+      }
+      html+="<td>"+cell+"</td>";
+    }
+    html+="<td><button class='btn small' data-act='del' data-i='"+idx+"'>删</button></td></tr>";
+  });
+  tbl.innerHTML=html;
+}
+document.getElementById("recTable").addEventListener("click",e=>{
+  const act=e.target.dataset.act;if(!act)return;
+  const i=+e.target.dataset.i;
+  if(act==="base"){records.forEach((r,j)=>r.baseline=j===i);}
+  else if(act==="del"){records.splice(i,1);if(records.length&&!records.some(r=>r.baseline))records[0].baseline=true;}
+  saveRecords();renderRecords();reportReady();
+});
+document.getElementById("recBtn").addEventListener("click",recordRun);
+document.getElementById("clearRecBtn").addEventListener("click",()=>{records=[];lastPlan=null;saveRecords();renderRecords();reportReady();});
+document.getElementById("csvBtn").addEventListener("click",()=>{
+  const head=["方案","描述","基准",...REC_COLS.map(c=>c[0])];
+  const lines=[head.join(",")];
+  for(const r of records)
+    lines.push([r.name,'"'+r.desc+'"',r.baseline?"1":"0",
+      ...REC_COLS.map(c=>r.m[c[1]]===null||r.m[c[1]]===undefined?"":r.m[c[1]].toFixed(3))].join(","));
+  const csv=lines.join("\n");
+  const box=document.getElementById("csvBox");
+  box.value=csv;box.hidden=false;
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(csv).then(
+      ()=>document.getElementById("recHint").textContent="CSV 已复制到剪贴板（下方可手动全选复制）",
+      ()=>document.getElementById("recHint").textContent="请在下方文本框手动全选复制");
+  else document.getElementById("recHint").textContent="请在下方文本框手动全选复制";
+});
+
+/* ================= 指标说明 ================= */
+const METRIC_DEFS={
+  t2:["达温 t2","单次运转时长：thermo-on（温控器请求制冷/制热）到 thermo-off（达温停机）的时间，取均值。反映每次达温需要多久","min","并非越短越好：过短=频繁启停，过长=拉不住温度"],
+  t1:["停机 t1","达温停机到下一次启动之间的停机时长，取均值","min","越长说明一次运转的\"续航\"越久、启停越少"],
+  period:["达温间隔","完整循环周期 = t2 + t1，取均值。即相邻两次达温之间的时间","min","越长循环越少；V1.44 的 TA 目标就是拉长它"],
+  hz95:["压缩机到峰值","压缩机从启动到达到本循环最高频率的 95% 所需时间，取均值。反映出力爬升速度","min","越短出力越快，达温越有保障"],
+  cyc:["循环/天","每天压缩机启停循环次数","次/天","越少启停损耗与磨损越小；但过少常伴随温度波动增大"],
+  kwh:["kWh/天","日均总耗电：压缩机 + 内机风机 + 电辅热（制热）","kWh","越低越省电"],
+  rmse:["RMSE℃","室温对设定温度的均方根偏差","℃","越小温度越稳、舒适性越好"],
+  oob:["出带%","室温超出\"设定值 ± 回差\"范围之外的时间占比","%","越小越好；达温慢/能力不足时会明显升高"],
+  rh:["RH%","室内相对湿度均值（制冷模式）","%","住宅舒适区间约 40~60%"],
+  rh60:["RH>60%","室内相对湿度超过 60% 舒适上限的时间占比","%","越小除湿效果越好——除湿不足投诉的直接量化"],
+  dehum:["除湿L/天","日均净除湿量：盘管凝水实际排走量（除湿量 − 停机再蒸发回房间的部分）","L/天","湿区（佛州/德州）越大越好"],
+  auxk:["辅热kWh","日均电辅热耗电（制热模式）","kWh/天","越少说明热泵本体承担越多，越省电"],
+  defr:["化霜/天","日均化霜次数（制热模式，化霜期间制热能力为 0）","次/天","越少越好"],
+};
+function renderDefs(){
+  document.getElementById("defsTable").innerHTML=
+    "<tr><th>指标</th><th>定义</th><th>单位</th><th>解读</th></tr>"+
+    REC_COLS.map(c=>{const d=METRIC_DEFS[c[1]];
+      return "<tr><td>"+d[0]+"</td><td>"+d[1]+"</td><td>"+d[2]+"</td><td>"+d[3]+"</td></tr>";}).join("");
+}
+document.getElementById("defsBtn").addEventListener("click",()=>{
+  const p=document.getElementById("defsPanel");
+  p.hidden=!p.hidden;
+  if(!p.hidden)renderDefs();
+});
+
+/* ================= LLM 分析报告 ================= */
+const LLM_PRESETS={
+  claude:{name:"Claude（Anthropic）",protocol:"anthropic",base:"https://api.anthropic.com",model:"claude-opus-5"},
+  openai:{name:"OpenAI",protocol:"openai",base:"https://api.openai.com/v1",model:"gpt-4o-mini"},
+  deepseek:{name:"DeepSeek",protocol:"openai",base:"https://api.deepseek.com",model:"deepseek-chat"},
+  glm:{name:"智谱 GLM",protocol:"openai",base:"https://open.bigmodel.cn/api/paas/v4",model:"glm-4.6"},
+  kimi:{name:"Kimi（月之暗面）",protocol:"openai",base:"https://api.moonshot.cn/v1",model:"kimi-k2-turbo-preview"},
+  minimax:{name:"MiniMax",protocol:"openai",base:"https://api.minimaxi.com/v1",model:"MiniMax-M2"},
+};
+let llmCfgs=[],llmPtr=0;
+try{llmCfgs=JSON.parse(localStorage.getItem("acLlmCfgs")||"[]");
+    llmPtr=+localStorage.getItem("acLlmPtr")||0;}catch(e){}
+function saveLlm(){try{localStorage.setItem("acLlmCfgs",JSON.stringify(llmCfgs));
+  localStorage.setItem("acLlmPtr",String(llmPtr));}catch(e){}}
+// 站点级 API 配置：在服务器上配一次，任何电脑、任何浏览器打开都自动带上，不必逐台再填。
+// 下发的是同源的 /api/<名字> 与占位 Key——真实 Key 只在服务端反代里，浏览器永远拿不到。
+// 取不到就静默跳过（Artifact 预览与 file:// 打开都取不到，属正常），已有的本地配置不动。
+fetch("config.json",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(j=>{
+  if(!j||!Array.isArray(j.apis))return;
+  let added=0;
+  for(const a of j.apis){
+    if(!a||!a.base)continue;
+    if(llmCfgs.some(c=>c.name===a.name&&c.base===a.base))continue;   // 按 名字+地址 去重
+    llmCfgs.push({name:a.name||"站点配置",protocol:a.protocol==="anthropic"?"anthropic":"openai",
+                  base:a.base,model:a.model||"",key:a.key||"proxy",on:true,site:true});
+    added++;
+  }
+  if(added){saveLlm();try{renderCfgs();}catch(e){}}
+}).catch(()=>{});
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function renderCfgs(){
+  document.getElementById("cfgRows").innerHTML=llmCfgs.map((c,i)=>
+    '<div class="cfgrow" data-i="'+i+'">'+
+    '<input type="checkbox" data-f="on"'+(c.on?" checked":"")+' aria-label="启用">'+
+    '<input type="text" data-f="name" value="'+esc(c.name)+'">'+
+    '<select data-f="protocol"><option value="openai"'+(c.protocol==="openai"?" selected":"")+'>OpenAI 协议</option>'+
+      '<option value="anthropic"'+(c.protocol==="anthropic"?" selected":"")+'>Anthropic 协议</option></select>'+
+    '<input type="text" data-f="base" value="'+esc(c.base)+'" spellcheck="false">'+
+    '<input type="text" data-f="model" value="'+esc(c.model)+'" spellcheck="false">'+
+    '<input type="password" data-f="key" value="'+esc(c.key||"")+'" placeholder="sk-..." autocomplete="off">'+
+    '<button class="btn small" data-act="test">测试</button>'+
+    '<button class="btn small" data-act="del">删</button>'+
+    '<span class="tstat" style="grid-column:1/-1">'+(c.tstat||"")+'</span></div>').join("")
+    ||'<p class="note">尚无配置。点击上方预置按钮添加，填入 API Key 后「测试」。</p>';
+}
+document.getElementById("cfgBtn").addEventListener("click",()=>{
+  const p=document.getElementById("cfgPanel");
+  p.hidden=!p.hidden;
+  if(!p.hidden)renderCfgs();
+});
+document.getElementById("presetRow").addEventListener("click",e=>{
+  const k=e.target.dataset.p;if(!k)return;
+  llmCfgs.push({...LLM_PRESETS[k],on:true,key:"",tstat:""});
+  saveLlm();renderCfgs();
+});
+document.getElementById("cfgRows").addEventListener("input",e=>{
+  const row=e.target.closest(".cfgrow");if(!row)return;
+  const c=llmCfgs[+row.dataset.i],f=e.target.dataset.f;
+  if(!c||!f)return;
+  c[f]=e.target.type==="checkbox"?e.target.checked:e.target.value;
+  saveLlm();
+});
+document.getElementById("cfgRows").addEventListener("click",async e=>{
+  const act=e.target.dataset.act;if(!act)return;
+  const row=e.target.closest(".cfgrow"),i=+row.dataset.i,c=llmCfgs[i];
+  if(act==="del"){llmCfgs.splice(i,1);saveLlm();renderCfgs();return;}
+  if(act==="test"){
+    c.tstat="测试中…";renderCfgs();
+    const t0=performance.now();
+    try{
+      const txt=await llmCall(c,"你是连通性测试助手。","请只回复两个字符：OK",16);
+      c.tstat="✓ 连通（"+((performance.now()-t0)/1000).toFixed(1)+"s）："+txt.slice(0,40);
+    }catch(err){c.tstat="✗ "+describeErr(err);}
+    saveLlm();renderCfgs();
+  }
+});
+function describeErr(err){
+  if(err instanceof TypeError&&/fetch/i.test(err.message))
+    return "网络请求被阻止（Artifact 预览环境禁止外部 API；请在本地打开 web/index.html 或部署后使用），或目标不支持浏览器跨域";
+  return err.message;
+}
+async function llmParse(r){
+  const t=await r.text();
+  let j=null;try{j=JSON.parse(t);}catch(e){}
+  if(!r.ok){
+    const msg=j&&j.error&&(j.error.message||j.error.type);
+    throw new Error("HTTP "+r.status+(msg?"："+msg:t?"："+t.slice(0,160):""));
+  }
+  if(!j)throw new Error("响应不是 JSON");
+  return j;
+}
+async function llmCall(cfg,sys,user,maxTok){
+  if(!cfg.key)throw new Error("未填 API Key");
+  const base=(cfg.base||"").replace(/\/+$/,"");
+  if(cfg.protocol==="anthropic"){
+    const r=await fetch(base+"/v1/messages",{method:"POST",headers:{
+      "content-type":"application/json","x-api-key":cfg.key,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:cfg.model,max_tokens:maxTok,system:sys,
+        messages:[{role:"user",content:user}]})});
+    const j=await llmParse(r);
+    const txt=(j.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+    if(!txt)throw new Error(j.stop_reason==="refusal"?"模型拒绝了该请求":"空响应");
+    return txt;
+  }
+  const ep=/chat\/completions|chatcompletion/.test(base)?base:base+"/chat/completions";
+  const r=await fetch(ep,{method:"POST",headers:{"content-type":"application/json",
+    "authorization":"Bearer "+cfg.key},
+    body:JSON.stringify({model:cfg.model,max_tokens:maxTok,
+      messages:[{role:"system",content:sys},{role:"user",content:user}]})});
+  const j=await llmParse(r);
+  const txt=j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;
+  if(!txt)throw new Error("空响应（"+JSON.stringify(j).slice(0,120)+"）");
+  return txt;
+}
+function buildPrompt(recs,focus){
+  recs=recs||records;
+  const defs=REC_COLS.map(c=>{const d=METRIC_DEFS[c[1]];
+    return "- "+d[0]+"（"+d[2]+"）："+d[1]+"。"+d[3];}).join("\n");
+  const sys="你是暖通空调（HVAC）变频控制算法仿真分析专家。背景：面向北美替代市场的一拖一变频空调，"+
+    "内外机无通讯，外机只能通过温控器 thermo-on/off 时序与自测冷媒能力做能需判断；被评估的 V1.44 算法"+
+    "通过负荷自学习调整目标蒸发/冷凝温度（Tes/Tcs）以拉长运转循环省电。仿真平台为 2R2C 房间模型 + 湿平衡 + "+
+    "显式压缩机频率 + ADP/旁通因子除湿模型，结论适用于方案间相对比较。已知两项客户反馈：达温慢、除湿不足。\n"+
+    "指标定义：\n"+defs;
+  const base=recs.find(r=>r.baseline)||recs[0];
+  const lines=recs.map(r=>{
+    const ms=REC_COLS.map(c=>{const v=r.m[c[1]];
+      return METRIC_DEFS[c[1]][0]+"="+(v===null||v===undefined?"—":(+v).toFixed(c[2]));}).join("，");
+    return "【"+r.name+(r===base?"（基准）":"")+"】配置："+r.desc+"\n  指标："+ms;
+  }).join("\n");
+  const user="以下是 "+recs.length+" 个仿真方案的运行记录（基准为 "+(base?base.name:"无")+"）：\n\n"+lines+
+    (focus?"\n\n用户本次实验的关注点："+focus+
+      "\n（评价舒适度请综合：达温 t2/初始达温 = 达温速度，RMSE℃/出带% = 温度稳定性，RH%/RH>60% = 湿度舒适；请优先回答关注点）":"")+
+    "\n\n方法学提示：各方案预热时长一致、测量窗口起始时刻相同，预热结束只清统计并保留算法已学到的状态；"+
+    "但 V1.44 的 Tes 自学习存在双稳态，达温 t2 与循环间隔的绝对值会随预热落点变化。"+
+    "请以方案间的相对差异为结论依据，不要把绝对值外推到实机；若某方案的 t2 与同组其他方案相差近一倍，"+
+    "应指出这可能是学习器落入了不同的收敛盆，而非单纯的风量/参数效应。"+
+    "\n\n请输出中文 Markdown 分析报告，包含：\n"+
+    "1. 执行摘要（3~5 句，先给结论）\n"+
+    "2. 各方案相对基准的关键差异与机理解释（结合变频空调控制原理，解释为什么会这样）\n"+
+    "3. 节能–达温（舒适）–除湿 三角权衡分析\n"+
+    "4. 推荐方案与参数调整建议（明确指出推荐哪个方案或哪组参数方向）\n"+
+    "5. 下一步值得补充的仿真实验建议\n"+
+    "要求：用数据说话，引用具体指标值与差异百分比；指出任何反直觉或需要警惕的结果。";
+  return {sys,user};
+}
+async function llmPoolCall(sys,user,maxTok,statusFn,verb){
+  const pool=llmCfgs.filter(c=>c.on&&c.key);
+  if(!pool.length)return {ok:false,reason:"no_cfg",errs:[]};
+  const start=llmPtr%pool.length,errs=[];
+  for(let i=0;i<pool.length;i++){
+    const cfg=pool[(start+i)%pool.length];
+    statusFn("正在调用 "+cfg.name+"（"+cfg.model+"）"+(verb||"")+"… 轮询 "+(i+1)+"/"+pool.length);
+    const t0=performance.now();
+    try{
+      const txt=await llmCall(cfg,sys,user,maxTok);
+      llmPtr=start+i+1;saveLlm();
+      return {ok:true,txt,cfg,secs:(performance.now()-t0)/1000};
+    }catch(err){errs.push(cfg.name+"："+describeErr(err));}
+  }
+  return {ok:false,reason:"all_failed",errs};
+}
+function mdRender(md){
+  const lines=md.split("\n");let html="",inUl=false,inOl=false,inTable=false;
+  const close=()=>{if(inUl){html+="</ul>";inUl=false;}if(inOl){html+="</ol>";inOl=false;}
+    if(inTable){html+="</table>";inTable=false;}};
+  const inline=s=>esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/`([^`]+)`/g,"<code>$1</code>");
+  for(const raw of lines){
+    const l=raw.trimEnd();
+    let m;
+    if((m=l.match(/^(#{1,3})\s+(.*)/))){close();html+="<h"+m[1].length+">"+inline(m[2])+"</h"+m[1].length+">";}
+    else if(/^\s*[-*]\s+/.test(l)){if(!inUl){close();html+="<ul>";inUl=true;}
+      html+="<li>"+inline(l.replace(/^\s*[-*]\s+/,""))+"</li>";}
+    else if(/^\s*\d+[.、]\s+/.test(l)){if(!inOl){close();html+="<ol>";inOl=true;}
+      html+="<li>"+inline(l.replace(/^\s*\d+[.、]\s+/,""))+"</li>";}
+    else if(/^\|.*\|$/.test(l)){
+      if(/^\|[\s:|-]+\|$/.test(l))continue;
+      if(!inTable){close();html+="<table>";inTable=true;}
+      const cells=l.slice(1,-1).split("|").map(c=>inline(c.trim()));
+      html+="<tr>"+cells.map(c=>"<td>"+c+"</td>").join("")+"</tr>";}
+    else if(l===""){close();}
+    else{close();html+="<p>"+inline(l)+"</p>";}
+  }
+  close();return html;
+}
+function llmStatus(msg,err){
+  const el=document.getElementById("llmStatus");
+  el.textContent=msg;el.className="llm-status"+(err?" err":"");
+}
+document.getElementById("promptBtn").addEventListener("click",()=>{
+  if(!records.length){llmStatus("请先记录至少一个方案。",true);return;}
+  const {sys,user}=buildPrompt();
+  const full=sys+"\n\n---\n\n"+user;
+  const box=document.getElementById("csvBox");
+  box.value=full;box.hidden=false;
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(full).then(
+      ()=>llmStatus("分析提示词已复制到剪贴板（含指标定义与全部方案数据），可粘贴到任意大模型。"),
+      ()=>llmStatus("请在下方文本框手动全选复制。"));
+  else llmStatus("请在下方文本框手动全选复制。");
+});
+let lastReport="",lastReportSrc="";
+function showReport(res){
+  lastReport=res.txt;
+  lastReportSrc=res.cfg.name+"（"+res.cfg.model+"）";
+  document.getElementById("repOut").innerHTML=mdRender(res.txt);
+  document.getElementById("copyRepBtn").hidden=false;
+  reportReady();
+  llmStatus("报告由 "+res.cfg.name+"（"+res.cfg.model+"）生成，耗时 "+res.secs.toFixed(1)+" s。");
+}
+document.getElementById("genBtn").addEventListener("click",async()=>{
+  if(records.length<2){llmStatus("请先记录至少两个方案（含基准）再生成对比报告。",true);return;}
+  const {sys,user}=buildPrompt();
+  const res=await llmPoolCall(sys,user,4096,llmStatus,"");
+  if(res.ok){showReport(res);return;}
+  if(res.reason==="no_cfg"){
+    llmStatus("尚无可用 API 配置：点「API 配置」添加并测试；或用「复制分析提示词」粘贴到任意大模型。",true);
+    document.getElementById("cfgPanel").hidden=false;renderCfgs();return;
+  }
+  llmStatus("全部 API 调用失败 — "+res.errs.join("； "),true);
+});
+document.getElementById("copyRepBtn").addEventListener("click",()=>{
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(lastReport).then(()=>llmStatus("报告 Markdown 已复制。"));
+});
+
+/* ================= 报告导出：PDF（打印）/ Markdown / HTML ================= */
+let lastPlan=null;          // 最近一次助手实验计划，供报告写"实验设计"一节
+function stamp(){
+  const d=new Date(),p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+}
+function fileStamp(){
+  const d=new Date(),p=n=>String(n).padStart(2,"0");
+  return ""+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes());
+}
+// 方案对比表（行=方案，列=13 项指标），Δ 相对基准
+function recordsTableHtml(){
+  if(!records.length)return "<p>（无方案记录）</p>";
+  const base=records.find(r=>r.baseline)||records[0];
+  let h="<table><thead><tr><th>方案</th>"+REC_COLS.map(c=>"<th>"+esc(c[0])+"</th>").join("")+"</tr></thead><tbody>";
+  for(const r of records){
+    h+="<tr><td><b>"+esc(r.name)+(r===base?" ★基准":"")+"</b><br><span style='font-size:7.5pt;color:#666'>"
+      +esc(r.desc)+"</span></td>";
+    for(const [,k,dec,lower] of REC_COLS){
+      const v=r.m[k],bv=base.m[k];
+      if(v==null){h+="<td>—</td>";continue;}
+      let cell=(+v).toFixed(dec);
+      if(r!==base&&bv!=null&&Math.abs(bv)>1e-9){
+        const pct=(v-bv)/Math.abs(bv)*100;
+        if(Math.abs(pct)>=1)cell+=" <span style='font-size:7.5pt'>("+(pct>0?"+":"")+pct.toFixed(0)+"%)</span>";
+      }
+      h+="<td>"+cell+"</td>";
+    }
+    h+="</tr>";
+  }
+  return h+"</tbody></table>";
+}
+function planSectionHtml(){
+  if(!lastPlan)return "";
+  const kv=o=>{const e=Object.entries(o||{});return e.length
+    ?e.map(([k,v])=>(VAR_DEFS[k]?VAR_DEFS[k][0]:k)+"="+v).join("，"):"（全部默认）";};
+  let h="<h2>实验设计</h2><p class='lead'>共 <b>"+lastPlan.variants.length+"</b> 个方案 = "
+    +lastPlan.compare.length+" 个对比臂 × "+lastPlan.conditions.length+" 个条件档；"
+    +"每方案预热 "+lastPlan.warmup_h+" h + 测量 "+lastPlan.days+" 天。"
+    +"共同设定："+esc(kv(lastPlan.base))+"</p>";
+  if(lastPlan.compare.length>1){
+    h+="<h3>对比臂（臂间只差一个变量）</h3><table><thead><tr><th>臂</th><th>相对共同设定的改动</th></tr></thead><tbody>";
+    lastPlan.compare.forEach((a,i)=>{h+="<tr><td>"+esc(a.name)+(i===0?"（基准臂）":"")+"</td><td>"+esc(kv(a.set))+"</td></tr>";});
+    h+="</tbody></table>";
+  }
+  if(lastPlan.conditions.length>1){
+    h+="<h3>条件维度（逐一调节，不做全交叉）</h3><table><thead><tr><th>条件档</th><th>相对基线的改动</th></tr></thead><tbody>";
+    lastPlan.conditions.forEach(c=>{h+="<tr><td>"+esc(c.name)+"</td><td>"+esc(kv(c.set))+"</td></tr>";});
+    h+="</tbody></table>";
+  }
+  if(lastPlan.guessed&&lastPlan.guessed.length)
+    h+="<h3>自动取值与模型说明</h3><ul>"+lastPlan.guessed.map(g=>"<li>"+esc(g)+"</li>").join("")+"</ul>";
+  if(lastPlan.warnings&&lastPlan.warnings.length)
+    h+="<h3>校验警告</h3><ul>"+lastPlan.warnings.map(g=>"<li>"+esc(g)+"</li>").join("")+"</ul>";
+  return h;
+}
+function metricsAppendixHtml(){
+  return "<h2>附录：指标定义</h2><table><thead><tr><th>指标</th><th>定义</th><th>单位</th><th>解读</th></tr></thead><tbody>"
+    +REC_COLS.map(c=>{const d=METRIC_DEFS[c[1]];
+      return "<tr><td>"+esc(d[0])+"</td><td class='tl'>"+esc(d[1])+"</td><td>"+esc(d[2])
+        +"</td><td class='tl'>"+esc(d[3])+"</td></tr>";}).join("")+"</tbody></table>";
+}
+const CAVEAT_HTML=
+  "<h2>模型边界与结论适用范围</h2><div class='caveat'>"
+  +"<p>1. 仿真为单区集总模型（2R2C 房间 + 湿平衡 + ADP/旁通因子除湿 + 显式压缩机频率），"
+  +"用于<b>方案之间的相对比较</b>；绝对值不宜直接外推到实机。</p>"
+  +"<p>2. V1.44 的 Tes/Tcs 自学习存在双稳态：达温 t2 与循环间隔的绝对值会随预热落点变化。"
+  +"本报告各方案共享同一预热时长与同一测量起始时刻，因此相对差异可信；"
+  +"若某方案的 t2 与同组其他方案相差近一倍，应考虑学习器落入了不同收敛盆。</p>"
+  +"<p>3. 室内湿平衡时间常数约 25 h。预热不足 24 h 会系统性高估除湿量（实测 0.5 h 预热比 24 h 高约 25%）。</p>"
+  +"<p>4. 地点设计工况为内置 ASHRAE 值（ANSI/ASHRAE Standard 169 / Fundamentals），发布前请对照 "
+  +"ashrae-meteo.info 或 ASHRAE 官网复核。</p>"
+  +"<p>5. 算法层严格遵守北美替代市场的信息边界：只能看到温控器 thermo-on/off 时序、室外温度与"
+  +"外机自测能力（可注入测量偏差）；室温、湿度、设定值、回差仅对温控器与房间模型可见。</p></div>";
+
+function buildReportDoc(){
+  const title="空调控制算法仿真 · 方案对比分析报告";
+  const src=lastReportSrc?("　·　报告生成："+esc(lastReportSrc)):"";
+  let h="<h1>"+title+"</h1>";
+  h+="<p class='meta'>生成时间："+stamp()+"　·　方案数："+records.length+src+"</p>";
+  h+=planSectionHtml();
+  h+="<h2>方案对比数据</h2><p class='lead'>括号内为相对基准方案的变化百分比。</p>"+recordsTableHtml();
+  const mx=document.getElementById("aiSummary");
+  if(mx&&mx.innerHTML.trim())h+="<h2>对比矩阵</h2>"+mx.innerHTML;
+  if(lastReport)h+="<div class='pagebreak'></div><h2>分析报告</h2>"+mdRender(lastReport);
+  h+="<div class='pagebreak'></div>"+metricsAppendixHtml()+CAVEAT_HTML;
+  return {title,html:h};
+}
+function buildReportMd(){
+  const kv=o=>{const e=Object.entries(o||{});return e.length
+    ?e.map(([k,v])=>(VAR_DEFS[k]?VAR_DEFS[k][0]:k)+"="+v).join("，"):"（全部默认）";};
+  const L=[];
+  L.push("# 空调控制算法仿真 · 方案对比分析报告","",
+    "生成时间："+stamp()+"　·　方案数："+records.length+(lastReportSrc?"　·　报告生成："+lastReportSrc:""),"");
+  if(lastPlan){
+    L.push("## 实验设计","",
+      "共 "+lastPlan.variants.length+" 个方案 = "+lastPlan.compare.length+" 个对比臂 × "
+      +lastPlan.conditions.length+" 个条件档；每方案预热 "+lastPlan.warmup_h+" h + 测量 "+lastPlan.days+" 天。",
+      "共同设定："+kv(lastPlan.base),"");
+    if(lastPlan.compare.length>1){
+      L.push("### 对比臂","","| 臂 | 相对共同设定的改动 |","| --- | --- |");
+      lastPlan.compare.forEach((a,i)=>L.push("| "+a.name+(i===0?"（基准臂）":"")+" | "+kv(a.set)+" |"));
+      L.push("");
+    }
+    if(lastPlan.conditions.length>1){
+      L.push("### 条件维度","","| 条件档 | 相对基线的改动 |","| --- | --- |");
+      lastPlan.conditions.forEach(c=>L.push("| "+c.name+" | "+kv(c.set)+" |"));
+      L.push("");
+    }
+    if(lastPlan.guessed&&lastPlan.guessed.length){
+      L.push("### 自动取值与模型说明","");lastPlan.guessed.forEach(g=>L.push("- "+g));L.push("");
+    }
+    if(lastPlan.warnings&&lastPlan.warnings.length){
+      L.push("### 校验警告","");lastPlan.warnings.forEach(g=>L.push("- "+g));L.push("");
+    }
+  }
+  L.push("## 方案对比数据","");
+  if(records.length){
+    const base=records.find(r=>r.baseline)||records[0];
+    L.push("| 方案 | 配置 | "+REC_COLS.map(c=>c[0]).join(" | ")+" |");
+    L.push("| --- | --- |"+REC_COLS.map(()=>" --- |").join(""));
+    for(const r of records){
+      const cells=REC_COLS.map(([,k,dec])=>{const v=r.m[k];
+        if(v==null)return "—";
+        let t=(+v).toFixed(dec);
+        const bv=base.m[k];
+        if(r!==base&&bv!=null&&Math.abs(bv)>1e-9){
+          const pct=(v-bv)/Math.abs(bv)*100;
+          if(Math.abs(pct)>=1)t+=" ("+(pct>0?"+":"")+pct.toFixed(0)+"%)";
+        }
+        return t;});
+      L.push("| "+r.name+(r===base?" ★基准":"")+" | "+r.desc+" | "+cells.join(" | ")+" |");
+    }
+    L.push("");
+  }else L.push("（无方案记录）","");
+  const mx=document.getElementById("aiSummary");
+  if(mx&&mx.innerText.trim())L.push("## 对比矩阵","","```",mx.innerText.trim(),"```","");
+  if(lastReport)L.push("## 分析报告","",lastReport,"");
+  L.push("## 附录：指标定义","","| 指标 | 定义 | 单位 | 解读 |","| --- | --- | --- | --- |");
+  REC_COLS.forEach(c=>{const d=METRIC_DEFS[c[1]];
+    L.push("| "+d[0]+" | "+d[1]+" | "+d[2]+" | "+d[3]+" |");});
+  L.push("","## 模型边界与结论适用范围","",
+    "1. 仿真为单区集总模型（2R2C 房间 + 湿平衡 + ADP/旁通因子除湿 + 显式压缩机频率），用于方案之间的相对比较；绝对值不宜直接外推到实机。",
+    "2. V1.44 的 Tes/Tcs 自学习存在双稳态：达温 t2 与循环间隔的绝对值会随预热落点变化。本报告各方案共享同一预热时长与同一测量起始时刻，因此相对差异可信。",
+    "3. 室内湿平衡时间常数约 25 h。预热不足 24 h 会系统性高估除湿量。",
+    "4. 地点设计工况为内置 ASHRAE 值，发布前请对照 ashrae-meteo.info 或 ASHRAE 官网复核。",
+    "5. 算法层严格遵守北美替代市场的信息边界：只能看到 thermo-on/off 时序、室外温度与外机自测能力。");
+  return L.join("\n");
+}
+// 保存文件有两条路：Artifact 查看器只认 downloads 能力（页面自己发起的下载一律被拦），
+// 本地/自部署则用标准的 blob + a[download]。两条都不可用时如实告知，不谎称已下载。
+let dlCap;                       // undefined=未探测，null=不可用，对象=可用
+async function getDownloads(){
+  if(dlCap!==undefined)return dlCap;
+  dlCap=null;
+  try{
+    if(window.claude&&typeof window.claude.use==="function")
+      dlCap=await window.claude.use("downloads");
+  }catch(e){dlCap=null;}
+  return dlCap;
+}
+const DL_MSG={declined:"你取消了保存。",rate_limited:"保存请求过于频繁，稍后再试。",
+  too_large:"文件超过 16 MiB 上限。",rejected_extension:"当前环境不接受该文件格式。",
+  extension_not_enabled:"当前环境未开放该文件格式。",bad_request:"导出内容有误，请重试。"};
+async function saveFile(name,mime,text){
+  const cap=await getDownloads();
+  if(cap){
+    try{await cap.save({filename:name,data:text});return {ok:true,via:"viewer"};}
+    catch(e){const code=(e&&e.code)||"unavailable";
+      return {ok:false,msg:DL_MSG[code]||"当前环境无法保存文件，请本地打开 dist/index.html。"};}
+  }
+  try{
+    const blob=new Blob([text],{type:mime+";charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=name;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
+    return {ok:true,via:"blob"};
+  }catch(e){return {ok:false,msg:"当前环境无法保存文件，请本地打开 dist/index.html。"};}
+}
+function reportReady(){
+  const on=records.length>0;
+  for(const id of ["pdfBtn","mdBtn","htmlBtn"])document.getElementById(id).hidden=!on;
+  document.getElementById("pdfHint").hidden=!on;
+}
+document.getElementById("pdfBtn").addEventListener("click",()=>{
+  if(!records.length){llmStatus("还没有方案记录，先跑一次实验或记录方案。",true);return;}
+  const {html}=buildReportDoc();
+  document.getElementById("printRoot").innerHTML=html;
+  llmStatus("已打开打印对话框：在「目标 / 打印机」里选「另存为 PDF」即可保存。");
+  setTimeout(()=>window.print(),60);
+});
+document.getElementById("mdBtn").addEventListener("click",async()=>{
+  const r=await saveFile("空调仿真对比报告-"+fileStamp()+".md","text/markdown",buildReportMd());
+  llmStatus(r.ok?(r.via==="viewer"?"Markdown 已保存。":"已触发 Markdown 下载。"):r.msg,!r.ok);
+});
+document.getElementById("htmlBtn").addEventListener("click",async()=>{
+  const {title,html}=buildReportDoc();
+  const css=document.querySelector("style").textContent;
+  const doc="<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"+
+    "<title>"+esc(title)+"</title><style>"+css+
+    "\nbody{margin:0;padding:24px;font:14px/1.65 system-ui,-apple-system,\"PingFang SC\",\"Microsoft YaHei\",sans-serif;"+
+    "background:#fff;color:#111;max-width:900px;margin:0 auto}"+
+    "#printRoot{display:block!important}"+
+    "#printRoot table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0;font-variant-numeric:tabular-nums}"+
+    "#printRoot th,#printRoot td{border:1px solid #ccc;padding:4px 7px;text-align:right}"+
+    "#printRoot th{background:#f2f2f2}"+
+    "#printRoot th:first-child,#printRoot td:first-child,#printRoot .tl{text-align:left}"+
+    "#printRoot h2{margin:22px 0 6px;padding-bottom:4px;border-bottom:1px solid #bbb}"+
+    "#printRoot .caveat{border-left:3px solid #999;padding-left:12px;color:#444;font-size:13px}"+
+    "</style></head><body><div id=\"printRoot\">"+html+"</div></body></html>";
+  const r=await saveFile("空调仿真对比报告-"+fileStamp()+".html","text/html",doc);
+  llmStatus(r.ok?"HTML 已保存：打开后用浏览器打印即可另存为 PDF。":r.msg,!r.ok);
+});
+
+/* ================= 智能实验助手 ================= */
+// 可设变量目录：key → [中文名, 类型, min|枚举, max|备注, 单位]
+const VAR_DEFS={
+  loc:["地点","enum",Object.keys(LOCATIONS),"见取值对照"],
+  scen:["场景","enum",["summer_design","summer_typical","winter_design","winter_typical"],"夏设计日/典型夏日/冬设计日/典型冬日（制热对比需 winter_*）"],
+  ins:["保温档","enum",["poor","medium","good"],"一次设定 UA+ACH 组合"],
+  ua:["围护UA","num",200,800,"W/K"],
+  ach:["渗透换气","num",0.1,2,"ACH"],
+  vent:["机械新风","num",0,300,"m³/h"],
+  qint:["内扰显热","num",0,1500,"W"],
+  mgain:["室内产湿","num",0,2.5,"kg/h"],
+  tons:["能力段","enum",[3,5],"Ton"],
+  sat:["负荷满足度","num",50,150,"%"],
+  bias:["能力测量偏差","num",-15,15,"%"],
+  aux:["电辅热","num",0,12,"kW"],
+  cfm:["基准风量","num",300,460,"CFM/Ton"],
+  fanCtrl:["风量模式","enum",["fixed","two","auto"],"fixed=固定100%，two=两档风（配 twoStage），auto=自动风"],
+  twoStage:["两档风档位","enum",[1,2],"1=1档70%，2=2档100%"],
+  autoInit:["自动风初始风量","num",40,100,"%"],
+  autoWait:["自动风等待","num",10,90,"min"],
+  autoInt:["自动风提档间隔","num",5,30,"min"],
+  autoStep:["自动风提档幅度","num",5,30,"%"],
+  fan:["停机风机","enum",["auto","on"],"auto=停机90s后停风，on=常开"],
+  fstart:["启动频率","num",20,60,"Hz"],
+  hold:["启动保持","num",0,600,"s"],
+  ramp:["频率爬坡","num",0.1,2,"Hz/s"],
+  fmax:["最高频率","num",40,75,"Hz"],
+  tset:["设定温度","num",18,30,"℃"],
+  db:["温控器回差","num",0.5,3,"°F"],
+  algo:["控制算法","enum",["A","B","C"],"A=定频基线，B=变频固定目标（配 tgtb），C=V1.44自学习"],
+  tgtb:["算法B固定目标","num",4,52,"℃（制冷Tes 4~14，制热Tcs 38~52）"],
+  ta:["目标运转时间TA","num",10,180,"min"],
+  dz:["UP/DOWN死区","num",2,40,"%"],
+  rate:["Tes/Tcs调整速率","num",0.02,0.5,"℃/min"],
+  cyc:["单循环最大调整","num",0.2,3,"℃"],
+  pre:["预学习","bool"],
+};
+// 同一物理选择的伴随参数（判断"是否单变量对比"时归并到父变量）
+const PAIR_PARENT={twoStage:"fanCtrl",autoInit:"fanCtrl",autoWait:"fanCtrl",autoInt:"fanCtrl",autoStep:"fanCtrl",
+  tgtb:"algo",ta:"algo",dz:"algo",rate:"algo",cyc:"algo",pre:"algo",ua:"ins",ach:"ins"};
+const rootKey=k=>PAIR_PARENT[k]||k;
+function varCatalog(){
+  return Object.entries(VAR_DEFS).map(([k,d])=>{
+    const def=P0[k];
+    if(d[1]==="enum")return "- "+k+"（"+d[0]+"）：枚举 "+d[2].join("|")+"，默认 "+def+"。"+(d[3]||"");
+    if(d[1]==="bool")return "- "+k+"（"+d[0]+"）：true|false，默认 "+def;
+    return "- "+k+"（"+d[0]+"）：数值 "+d[2]+"~"+d[3]+" "+(d[4]||"")+"，默认 "+def;
+  }).join("\n");
+}
+
+/* ---------- 数值抽取 ---------- */
+function pickNums(t,re,lo,hi){
+  const out=[];
+  for(const m of t.matchAll(re)){const v=+m[1];if(v>=lo&&v<=hi&&!out.includes(v))out.push(v);}
+  return out;
+}
+const NUM_UNIT="(?:%|℃|°C|°F|分钟|小时|min|CFM|cfm|m³\\/h|kg\\/h|Hz|kW|kw|Ton|吨|顿|匹|度|次|档|挡|h|W)?";
+// 中文口语里的枚举连接词——只列前几个会让「3kw跟5kw」「从10改成20」在第一个词处断掉
+const NUM_SEP="(?:和|跟|同|与|及|以及|还有|还是|、|,|，|;|；|或|又|vs|VS|versus|PK|至|到|~|-|—|\\/|／|·|"+
+  "对|比|改成|改到|改|变成|换成|升到|降到|拉到|提到|压到|放到|开到|调到|调高到|调低到|打底|另外|再|步长|分别|一路扫到|扫到)";
+const REJECTED=[],CLAMPED=[];      // 越界值：告警用，绝不静默丢弃
+function nearNums(t,kw,lo,hi,clamp){
+  const signed=lo<0;               // 只有可取负的变量（bias）才解析符号，避免把「10-20」读成 10 和 −20
+  const numPat=signed?"[±+\\-−]?\\d+(?:\\.\\d+)?":"±?\\d+(?:\\.\\d+)?";
+  const lead=signed?"[^0-9±+\\-−]{0,6}":"[^0-9]{0,6}";
+  const re=new RegExp(kw+lead+"((?:"+numPat+"\\s*"+NUM_UNIT+"\\s*(?:"+NUM_SEP+"\\s*)*){1,8})","gi");
+  const grab=signed?/[+\-−±]?\d+(?:\.\d+)?/g:/±?\d+(?:\.\d+)?/g;
+  const out=[],bad=[];
+  for(const m of String(t).matchAll(re))
+    for(const n of m[1].matchAll(grab)){
+      const v=+n[0].replace("−","-").replace("±","");
+      if(v!==v)continue;
+      if(v>=lo&&v<=hi){if(!out.includes(v))out.push(v);}
+      else if(!bad.includes(v))bad.push(v);
+    }
+  if(bad.length){
+    if(clamp&&out.length<2){       // 钳位保留：宁可给个"已按边界处理"的臂，也不要整轴消失
+      for(const b of bad){
+        const c=Math.min(hi,Math.max(lo,b));
+        if(!out.includes(c))out.push(c);
+      }
+      CLAMPED.push({kw,bad,lo,hi});
+    }else REJECTED.push({kw,bad,lo,hi});   // 即使剩下的值够用，被丢掉的也必须告知
+  }
+  return out;
+}
+function numsWithUnit(t,kw,unit,lo,hi){
+  const re=new RegExp(kw+"\\s*(\\d+(?:\\.\\d+)?)\\s*(?:"+unit+")","gi");
+  const out=[];
+  for(const m of String(t).matchAll(re)){
+    const v=+m[1];
+    if(v>=lo&&v<=hi&&!out.includes(v))out.push(v);
+  }
+  return out;
+}
+const tsetNums=t=>{
+  const a=nearNums(t,"(?:设定温度|室内设定|设定值|温度设定|设点|tset)",18,30);
+  const b=numsWithUnit(t,"(?:设定|设到|设成|调到|打到|开到|设)","度|℃|°C|摄氏",18,30);
+  const out=[...new Set([...a,...b])];
+  if(out.length)
+    for(const v of numsWithUnit(t,"","度|℃|°C",18,30))if(!out.includes(v))out.push(v);
+  return out;
+};
+const setEqualsRef=(s,ref)=>Object.keys(s).length>0&&Object.entries(s).every(([k,v])=>ref[k]===v);
+// 地名（含中英别名与州/区域代表城市）
+const CITY_ALIAS=[["迈阿密","miami"],["Miami","miami"],["奥兰多","orlando"],["Orlando","orlando"],
+  ["休斯顿","houston"],["休斯敦","houston"],["休城","houston"],["Houston","houston"],["Hou","houston"],
+  ["达拉斯","dallas"],["Dallas","dallas"],["洛杉矶","los_angeles"],["Los Angeles","los_angeles"],
+  ["LA","los_angeles"],["弗雷斯诺","fresno"],["Fresno","fresno"],
+  ["波士顿","boston"],["Boston","boston"],["纽约","new_york"],["New York","new_york"],
+  ["NYC","new_york"],["NY","new_york"],
+  ["加州","los_angeles"],["加利福尼亚","los_angeles"],["德州","houston"],["德克萨斯","houston"],
+  ["佛州","miami"],["佛罗里达","miami"],["麻省","boston"],["马萨诸塞","boston"]];
+const CITY_NAMES=Object.fromEntries(CITY_ALIAS);
+function findCities(t){
+  const hits=[];
+  for(const [name,key] of CITY_ALIAS){
+    let idx;
+    if(/^[A-Za-z. ]+$/.test(name)){
+      const m=new RegExp("(^|[^A-Za-z])"+name.replace(/\./g,"\\.")+"($|[^A-Za-z])","i").exec(t);
+      idx=m?m.index:-1;
+    }else idx=t.indexOf(name);
+    if(idx>=0&&!hits.some(h=>h.key===key))hits.push({key,name,idx});
+  }
+  return hits.sort((a,b)=>a.idx-b.idx);
+}
+const wantsCooling=t=>/夏|制冷|热天|高温|降温|除湿|潮|不凉|降不下来|太热|闷热|[678]\s*月|summer|cooling/i.test(t);
+const wantsHeating=t=>/冬|制热|冷天|采暖|供暖|化霜|辅热|低温|制暖|不热|[12]\s*月|winter|heating/i.test(t);
+// 追加语气（"也来一版""再加个"）= 增量条件档；限定语气（"就用""固定在"）= 共同设定
+const ADD_CUE=/顺便|顺变|另外|额外|外加|还有|再看看|也来|也跑|也看|也试|也想|也带|再来|再跑|再加|加一个|加个|补一个|来一版|来一个|带一档|一起比|一起对比/;
+const FIX_CUE=/就用|就按|统一|都用|全部|一律|固定在|固定|设死|打死|不用改|别动|别的别动|按现在|现有/;
+function nearCue(t,kw,cue,win){
+  const i=t.search(kw);
+  if(i<0)return false;
+  const w=win||14;
+  return cue.test(t.slice(Math.max(0,i-w),i+w));
+}
+// 「加辅热和不加辅热差在哪」是要对比；「别加辅热」是把辅热设为 0
+const auxCompare=t=>/辅热|电辅热|辅助电热/.test(t)&&(
+  /(加|开|带|上|装)不(加|开|带|上|装)|有没有.{0,4}辅热|辅热.{0,8}(够不够|跟不跟得上|跟上|差在哪|值|有没有用|占多少|用多少|费多少|多少电)/.test(t)
+  ||(/(?<![别不无要用])[加开带上装]辅热/.test(t)&&/[别不无](要|用)?[加开带上装]辅热/.test(t)));
+const auxOff=t=>!auxCompare(t)&&
+  /[别不无](要|用)?加辅热|不开辅热|关掉辅热|去掉辅热|拆掉辅热|没有辅热|辅热.{0,4}[关停]/.test(t);
+function axisPos(a,t){
+  if(a.posOf)return a.posOf(t);
+  if(!a.posRe)return Infinity;
+  const m=a.posRe.exec(t);
+  return m?m.index:Infinity;
+}
+// 「条件上再看看X」「顺便看看X」：用户已明说这是条件，不该被扶成主对比
+const DEMOTE_CUE=/条件上|条件是|作为条件|顺便|顺变|另外|再看看|再顺便|的情况下|工况上/;
+function isDemoted(t,a){
+  const p=axisPos(a,t);
+  if(p===Infinity)return false;
+  return DEMOTE_CUE.test(t.slice(Math.max(0,p-16),p+4));
+}
+
+/* ---------- 主对比轴 ---------- */
+const AXES=[
+  {id:"fanCtrl",name:"内机风量模式",
+   posRe:/自动风|风量模式|固定\s*100|一直\s*100|固定风|定风[档檔]|[2二两貳贰１1一壹]\s*[档檔]\s*风|风[量档檔][^。，,；;]{0,4}[12一二两]\s*[档檔]/,
+   build:t=>{
+    const L=[];
+    if(/自动风|自动风量|auto\s*风|风量.{0,2}自动/i.test(t))L.push(["自动风",{fanCtrl:"auto"}]);
+    // 「档」在中文里更多是量词（大一档/带一档/两档扫描），必须要求风量语境，
+    // 否则会给全部方案偷偷锁上 70% 风量
+    const two=/(?:风[量档檔]|送风|内机|室内机)[^。，,；;]{0,4}[2二两貳贰２]\s*[档檔]|[2二两貳贰２]\s*[档檔]\s*风|双[档檔]风?|两档风/;
+    const one=/(?:风[量档檔]|送风|内机|室内机)[^。，,；;]{0,4}[1一壹]\s*[档檔]|[1一壹]\s*[档檔]\s*风|低[档檔]风|小风[档檔]/;
+    const listing=L.length>0||/固定风|固定\s*100|一直\s*100|固定风量|自动风/.test(t);
+    const two2=listing?/[2二两貳贰２]\s*[档檔]/:two;
+    const one2=listing?/[1一壹]\s*[档檔](?!风机)/:one;
+    if(two.test(t)||two2.test(t))L.push(["两档风·2档",{fanCtrl:"two",twoStage:2}]);
+    if(one.test(t)||one2.test(t))L.push(["两档风·1档",{fanCtrl:"two",twoStage:1}]);
+    if(/固定风|定风[档檔]|固定\s*100|一直\s*100|全速|满风|100\s*%\s*风|常风量|单风[档檔]|固定风量|固定[、，,]|固定档/.test(t))
+      L.push(["固定100%",{fanCtrl:"fixed"}]);
+    if(L.length<2&&/(三种|3\s*种|各种|所有|全部|几种|仨).{0,6}(风量|风[档檔])|风量.{0,4}(那)?\s*(三种|3\s*种|几种)|风[档檔]模式.{0,4}(都|全部|各)/.test(t))
+      return [["自动风",{fanCtrl:"auto"}],["两档风·1档",{fanCtrl:"two",twoStage:1}],
+              ["固定100%",{fanCtrl:"fixed"}]];
+    return L;}},
+  {id:"algo",name:"控制算法",
+   posRe:/定频|单级|单速|自学习|V\s*1\.?44|固定目标|算法\s*[ABC]|\b[ABC]\s*算法|[跟和与对]\s*[ABC]\b|变频|负荷预测/i,
+   build:t=>{
+    const L=[];
+    const letter=x=>new RegExp("算法\\s*"+x+"|\\b"+x+"\\s*算法|[跟和与对]\\s*"+x+"\\b|\\b"+x+
+      "\\s*(?:比|对比|PK|方案|的)","i").test(t);
+    if(/定频|单级机|单速|on\s*[-\/]?\s*off/i.test(t)||letter("A"))L.push(["A 定频基线",{algo:"A"}]);
+    if(/变频固定目标|固定目标|不学习|无自学习/i.test(t)||letter("B"))L.push(["B 固定目标",{algo:"B"}]);
+    if(/V\s*1\.?44|自学习|负荷预测/i.test(t)||letter("C"))L.push(["C V1.44 自学习",{algo:"C"}]);
+    if(!L.some(x=>x[1].algo==="C")&&/变频机|变频(?!.{0,4}固定目标)|inverter|直流变频/i.test(t)&&
+       L.some(x=>x[1].algo==="A"))L.push(["C V1.44 自学习",{algo:"C"}]);
+    return L;}},
+  {id:"pre",name:"预学习开关",posRe:/预学习/,build:t=>
+    /预学习/.test(t)?[["开预学习",{pre:true}],["关预学习",{pre:false}]]:[]},
+  {id:"fan",name:"停机风机策略",posRe:/停机风机|风机常开|常开风机|停机后.{0,6}风机|风机.{0,4}(继续转|跟着停)/,
+   build:t=>/停机风机|风机常开|常开风机|停机后.{0,6}风机|风机.{0,4}(继续转|跟着停)/.test(t)
+     ?[["停机风机 AUTO",{fan:"auto"}],["停机风机常开",{fan:"on"}]]:[]},
+  {id:"aux",name:"电辅热",posRe:/辅热|辅助电热|电加热/,build:t=>{
+    const v=nearNums(t,"(?:电?辅热|辅助电热|电加热)",0,12);
+    if(v.length>=2)return v.map(x=>["辅热"+x+"kW",{aux:x}]);
+    if(v.length===1)return [];        // 只给一个值 = 陈述条件，交给单值分支写入 base
+    // 仅在明确问"加不加/够不够"时才与"无辅热"配对
+    if(auxCompare(t))return [["辅热 8kW",{aux:8}],["无辅热 0kW",{aux:0}]];
+    return [];}},
+  {id:"tons",name:"能力段",posRe:/\d\s*(?:Ton|T\b|吨|顿|匹)|能力段|吨位/i,build:t=>{
+    const L=[];
+    if(/3\s*(Ton|T\b|吨|顿|匹)/i.test(t))L.push(["3 Ton",{tons:3}]);
+    if(/5\s*(Ton|T\b|吨|顿|匹)/i.test(t))L.push(["5 Ton",{tons:5}]);
+    return L;}},
+  {id:"tset",name:"室内设定温度",
+   posRe:/设定\s*温?度?\s*\d|设定值|设点|[设调打开][到成]?\s*\d|tset/i,
+   build:t=>tsetNums(t).map(v=>["设定"+v+"℃",{tset:v}])},
+  {id:"sat",name:"负荷满足度",posRe:/满足度|选型|裕度|一号|偏小|偏大|带不动|衰减|折减|打\s*[0-9七八九]\s*折|缩水|sat\b/i,
+   build:t=>{
+    const v=nearNums(t,"(?:满足度|sat)",50,150);
+    if(v.length>=2)return v.map(x=>["满足度"+x+"%",{sat:x}]);
+    // 低温能力衰减：衰减 20%/40% → 满足度 80%/60%
+    const dec=nearNums(t,"(?:衰减|折减|缩水)",0,60);
+    if(dec.length>=2)return dec.map(x=>["能力衰减"+x+"%",{sat:100-x}]);
+    // 「一档」是通用量词：UA大一档、风量小一档都不是选型口径，必须排除紧邻的其他变量名
+    const sizing=x=>new RegExp("(?<!UA|风量|回差|死区|TA|新风|产湿|内扰|频率)"+x).test(t);
+    const small=/小一号|选小|能力偏小|偏小了|配小|带不动|撑不住|能力不足/.test(t)||
+      (sizing("小一[档挡级]")&&/机|能力|选型|配|吨/.test(t));
+    const big=/大一号|选大|能力偏大|偏大了|配大|能力富余/.test(t)||
+      (sizing("大一[档挡级]")&&/机|能力|选型|配|吨/.test(t));
+    if(small&&big)return [["满足度70%（能力偏紧）",{sat:70}],["满足度130%（能力偏大）",{sat:130}]];
+    if(/打\s*七\s*折|打\s*0?\.?7\s*折/.test(t))
+      return [["能力打七折",{sat:70}],["不打折",{sat:100}]];
+    return v.map(x=>["满足度"+x+"%",{sat:x}]);}},
+  {id:"algoTgt",name:"固定目标 Tes/Tcs",posRe:/T[ec]s/i,build:(t,mode)=>{
+    // Tes 是制冷蒸发目标、Tcs 是制热冷凝目标，混在一个轴里会造出制冷模式下 tgtb=45 的垃圾臂
+    const v=mode==="cooling"?nearNums(t,"Tes",4,14):nearNums(t,"Tcs",38,52);
+    return v.map(x=>["目标"+x+"℃",{algo:"B",tgtb:x}]);}},
+  {id:"loc",name:"地点",posOf:t=>{const h=findCities(t);return h.length?h[0].idx:Infinity;},
+   build:t=>findCities(t).map(h=>[h.name,{loc:h.key}])},
+  {id:"cfm",name:"基准风量",posRe:/风量|CFM/i,build:t=>{
+    const v=[...pickNums(t,/(\d{3})\s*(?:CFM|cfm)/g,300,460),...nearNums(t,"(?:cfm|基准风量|每吨风量)",300,460),
+             ...nearNums(t,"风量",300,460)];
+    const u=[...new Set(v)];
+    if(u.length>=2)return u.map(x=>[x+" CFM/Ton",{cfm:x}]);
+    if(/风量.{0,6}(大|高).{0,8}(小|低)|风量.{0,6}(小|低).{0,8}(大|高)|大小风量|风量大小/.test(t))
+      return [["小风量 350 CFM/Ton",{cfm:350}],["大风量 450 CFM/Ton",{cfm:450}]];
+    return u.map(x=>[x+" CFM/Ton",{cfm:x}]);}},
+  {id:"db",name:"温控器回差",posRe:/回差|温差带|\bdb\b/i,build:t=>
+    nearNums(t,"(?:回差|温差带|db)",0.5,3).map(v=>["回差"+v+"°F",{db:v}])},
+  {id:"dz",name:"UP/DOWN 死区",posRe:/死区|判定死区|\bdz\b/i,build:t=>
+    nearNums(t,"(?:死区|dz)",2,40,true).map(v=>["死区±"+v+"%",{dz:v}])},
+  {id:"ta",name:"目标运转时间 TA",posRe:/\bTA\b|目标运转时间/i,build:t=>
+    nearNums(t,"(?:TA|目标运转时间)",10,180,true).map(v=>["TA "+v+"min",{ta:v}])},
+  {id:"bias",name:"能力测量偏差",posRe:/偏差|实测能力|标称|\bbias\b/i,build:t=>{
+    const v=nearNums(t,"(?:偏差|bias)",-15,15);
+    if(v.length>=2)return v.map(x=>["偏差"+(x>0?"+":"")+x+"%",{bias:x}]);
+    if(v.length===1)return [];
+    if(/偏差|实测能力|标称.{0,6}(差|少|低)|能力.{0,4}虚标/.test(t))
+      return [["无偏差",{bias:0}],["偏差 −10%",{bias:-10}],["偏差 +10%",{bias:10}]];
+    return [];}},
+  {id:"fmax",name:"压缩机最高频率",posRe:/最高频率|频率上限|变频上限|\bfmax\b/i,build:t=>
+    nearNums(t,"(?:最高频率|频率上限|变频上限|fmax)",40,75).map(v=>["最高"+v+"Hz",{fmax:v}])},
+  {id:"qint",name:"内扰显热",posRe:/内扰|室内发热|\bqint\b/i,build:t=>
+    nearNums(t,"(?:内扰|室内发热|qint)",0,1500).map(v=>["内扰"+v+"W",{qint:v}])},
+  {id:"rate",name:"Tes/Tcs 调整速率",posRe:/调整速率|学习速率|\brate\b/i,build:t=>{
+    const v=nearNums(t,"(?:调整速率|学习速率|rate)",0.02,0.5);
+    if(v.length>=2)return v.map(x=>["速率"+x+"℃/min",{rate:x}]);
+    if(/速率.{0,6}(快.{0,4}慢|慢.{0,4}快)|快一点.{0,6}慢一点/.test(t))
+      return [["速率慢 0.05",{rate:0.05}],["速率快 0.3",{rate:0.3}]];
+    return v.map(x=>["速率"+x+"℃/min",{rate:x}]);}},
+  {id:"scen",name:"季节工况",posRe:/夏|冬|季节|冷天|热天/,build:t=>{
+    if(!((wantsCooling(t)&&wantsHeating(t))||/不同季节|季节变化|各个?季节|全年|四季|两季/.test(t)))return [];
+    const design=/设计日|极端/.test(t);
+    return design
+      ?[["夏季设计日",{scen:"summer_design"}],["冬季设计日",{scen:"winter_design"}]]
+      :[["夏季典型日",{scen:"summer_typical"}],["冬季典型日",{scen:"winter_typical"}]];}},
+];
+
+/* ---------- 条件维度库 ---------- */
+function locLevels(t,mode){
+  if(/潮|湿|除湿/.test(t)&&mode==="cooling")
+    return [["迈阿密 FL（极湿 1A）",{loc:"miami"}],["奥兰多 FL（湿热 2A）",{loc:"orlando"}],
+            ["弗雷斯诺 CA（干热 3B）",{loc:"fresno"}]];
+  if(mode==="heating")
+    return [["波士顿 MA（冷 5A）",{loc:"boston"}],["纽约 NY（4A）",{loc:"new_york"}]];
+  return [["迈阿密 FL（极湿 1A）",{loc:"miami"}],["弗雷斯诺 CA（干热 3B）",{loc:"fresno"}]];
+}
+const DIMS=[
+  {id:"sat",name:"热负荷 / 选型裕度",
+   re:/热负荷|冷负荷|建筑负荷|负荷大小|负荷率|不同负荷|负荷条件|负荷情况|负荷变化|负荷轻重|满足度|选型|裕度|大小机|一号|负荷大|负荷高|大负荷|重负荷|带不动|撑不住|衰减|折减|缩水/,
+   levels:()=>[["高负荷·满足度70%",{sat:70}],["低负荷·满足度130%",{sat:130}]],
+   nums:t=>{
+     const v=nearNums(t,"(?:满足度|sat)",50,150);
+     if(v.length)return v.map(x=>["满足度"+x+"%",{sat:x}]);
+     const dec=nearNums(t,"(?:衰减|折减|缩水)",0,60);
+     if(dec.length)return dec.map(x=>["能力衰减"+x+"%",{sat:100-x}]);
+     const small=/小一号|选小|能力偏小|偏小了|配小|带不动|撑不住|能力不足|负荷大|负荷高|大负荷|重负荷/.test(t);
+     const big=/大一号|选大|能力偏大|偏大了|配大|能力富余|负荷小|轻负荷/.test(t);
+     if(small&&!big)return [["高负荷·满足度70%",{sat:70}]];
+     if(big&&!small)return [["低负荷·满足度130%",{sat:130}]];
+     return [];}},
+  {id:"moist",name:"湿度负荷",
+   // 裸词「湿度/除湿/潮」多半是在说要看的指标（"看看湿度能压到多少"），不能据此造湿源档
+   re:/湿度负荷|湿负荷|潮湿|不同湿度|各种潮|各种湿|潮的地方|除湿负荷|新风|产湿|人员|人多|湿源|回潮|闷/,
+   levels:(m,t)=>{
+     if(m!=="cooling")return [["新风200m³/h",{vent:200}]];
+     if(/新风/.test(t)&&!/产湿|人员|人多/.test(t))
+       return [["新风120m³/h",{vent:120}],["新风240m³/h",{vent:240}]];
+     if(/产湿|人员|人多/.test(t)&&!/新风/.test(t))
+       return [["产湿1.0kg/h",{mgain:1.0}],["产湿2.0kg/h",{mgain:2.0}]];
+     return [["高湿·新风200m³/h",{vent:200}],["高湿·产湿1.5kg/h",{mgain:1.5}]];},
+   nums:t=>[...nearNums(t,"新风",0,300).map(v=>["新风"+v+"m³/h",{vent:v}]),
+            ...nearNums(t,"(?:产湿|mgain)",0,2.5).map(v=>["产湿"+v+"kg/h",{mgain:v}])]},
+  {id:"tset",name:"室内设定温度",
+   re:/设定温度|室内设定|设定值|温度设定|设点|不同设定|设.{0,2}几度|温度往[低高]|温度调[高低]|[设调打开]到\s*\d+\s*(?:度|℃|°C)/,
+   levels:m=>m==="cooling"?[["设定23.0℃",{tset:23}],["设定26.0℃",{tset:26}]]
+                          :[["设定19.4℃",{tset:19.4}],["设定22.8℃",{tset:22.8}]],
+   nums:t=>tsetNums(t).map(v=>["设定"+v+"℃",{tset:v}])},
+  {id:"loc",name:"地区气候",
+   re:/地区|地域|城市|气候|不同地方|区域|气候区|不同州|主销|各地/,
+   levels:(m,t)=>locLevels(t,m).slice(0,2),
+   nums:t=>{const h=findCities(t);return h.length>=1?h.map(x=>[x.name,{loc:x.key}]):[];}},
+  {id:"scen",name:"季节工况",
+   re:/设计日|典型日|极端工况|不同季节|季节变化|冷天|热天|夏|冬|全年|四季/,
+   levels:(m,t)=>{
+     if((wantsCooling(t)&&wantsHeating(t))||/不同季节|季节变化|各个?季节|全年|四季|两季/.test(t))
+       return /设计日|极端/.test(t)
+         ?[["夏季设计日",{scen:"summer_design"}],["冬季设计日",{scen:"winter_design"}]]
+         :[["夏季典型日",{scen:"summer_typical"}],["冬季典型日",{scen:"winter_typical"}]];
+     return m==="cooling"?[["夏季设计日",{scen:"summer_design"}]]:[["冬季设计日",{scen:"winter_design"}]];},
+   nums:()=>[]},
+  {id:"ins",name:"围护保温",
+   re:/保温|围护|建筑结构|房屋结构|老房|新房|隔热|房子.{0,3}(好|差)|\b(poor|good|medium)\b/i,
+   levels:()=>[["保温差 UA520",{ins:"poor"}],["保温好 UA230",{ins:"good"}]],
+   nums:t=>/保温.{0,4}(好差|差好|好坏|都|各种|几种)|各种保温|不同保温|poor\s*\/\s*good/i.test(t)?[]:
+     [["poor",/保温差|差保温|保温不好|老房|保温烂|\bpoor\b/i,"保温差 UA520"],
+      ["medium",/保温中等|中等保温|一般保温|普通保温|\bmedium\b/i,"保温中 UA350"],
+      ["good",/保温好|好保温|保温良好|新房|保温不错|\bgood\b/i,"保温好 UA230"]]
+     .filter(x=>x[1].test(t)).map(x=>[x[2],{ins:x[0]}])},
+  {id:"ua",name:"房屋规模",
+   re:/房子大小|面积|大房子|小房子|房型|户型|多大的房|UA\s*(大|小|一档)/i,
+   levels:()=>[["小房子 UA250",{ua:250}],["大房子 UA500",{ua:500}]],
+   nums:t=>nearNums(t,"UA",200,800).map(v=>["UA"+v,{ua:v}])},
+  {id:"ach",name:"气密性",
+   re:/漏风|气密|渗透|换气次数|\bach\b/i,
+   levels:()=>[["漏风多 ACH1.0",{ach:1.0}],["气密好 ACH0.35",{ach:0.35}]],
+   nums:t=>nearNums(t,"(?:ACH|渗透换气|渗透|换气次数)",0.1,2).map(v=>["ACH"+v,{ach:v}])},
+  {id:"qint",name:"内扰显热",
+   re:/内扰|室内发热|\bqint\b/i,
+   levels:()=>[["内扰600W",{qint:600}],["内扰1200W",{qint:1200}]],
+   nums:t=>nearNums(t,"(?:内扰|室内发热|qint)",0,1500).map(v=>["内扰"+v+"W",{qint:v}])},
+  {id:"tons",name:"能力段",re:/能力段|吨位|机型/,levels:()=>[["5 Ton",{tons:5}]]},
+  {id:"cfm",name:"基准风量",re:/风量基准|基准风量|每吨风量|CFM/i,
+   levels:()=>[["350 CFM/Ton",{cfm:350}],["450 CFM/Ton",{cfm:450}]],
+   nums:t=>[...pickNums(t,/(\d{3})\s*(?:CFM|cfm)/g,300,460),...nearNums(t,"(?:cfm|每吨风量)",300,460)]
+     .filter((v,i,a)=>a.indexOf(v)===i).map(v=>[v+" CFM/Ton",{cfm:v}])},
+  {id:"db",name:"温控器回差",re:/回差|温差带|\bdb\b/i,
+   levels:()=>[["回差0.5°F",{db:0.5}],["回差2.0°F",{db:2}]],
+   nums:t=>nearNums(t,"(?:回差|温差带|db)",0.5,3).map(v=>["回差"+v+"°F",{db:v}])},
+  {id:"dz",name:"UP/DOWN 死区",re:/死区|判定死区|\bdz\b/i,
+   levels:()=>[["死区±10%",{dz:10}],["死区±30%",{dz:30}]],
+   nums:t=>nearNums(t,"(?:死区|dz)",2,40,true).map(v=>["死区±"+v+"%",{dz:v}])},
+  {id:"ta",name:"目标运转时间 TA",re:/\bTA\b|目标运转时间/i,
+   levels:()=>[["TA 30min",{ta:30}],["TA 90min",{ta:90}]],
+   nums:t=>nearNums(t,"(?:TA|目标运转时间)",10,180,true).map(v=>["TA "+v+"min",{ta:v}])},
+  {id:"bias",name:"能力测量偏差",re:/测量偏差|能力偏差|传感器偏差|偏差|实测能力|标称|\bbias\b/i,
+   levels:()=>[["偏差 +10%",{bias:10}],["偏差 −10%",{bias:-10}]],
+   nums:t=>nearNums(t,"(?:偏差|bias)",-15,15).map(v=>["偏差"+(v>0?"+":"")+v+"%",{bias:v}])},
+  {id:"aux",name:"电辅热",re:/辅热|电辅热|辅助电热|电加热/,
+   levels:()=>[["无辅热 0kW",{aux:0}]],
+   nums:t=>nearNums(t,"(?:电?辅热|辅助电热|电加热)",0,12).map(v=>["辅热"+v+"kW",{aux:v}])},
+  {id:"fmax",name:"压缩机最高频率",re:/最高频率|频率上限|变频上限|\bfmax\b/i,
+   levels:()=>[["最高55Hz",{fmax:55}],["最高70Hz",{fmax:70}]],
+   nums:t=>nearNums(t,"(?:最高频率|频率上限|变频上限|fmax)",40,75).map(v=>["最高"+v+"Hz",{fmax:v}])},
+  {id:"fan",name:"停机风机策略",re:/停机风机|风机常开|常开风机|停机后.{0,6}风机/,
+   levels:()=>[["停机风机常开",{fan:"on"}]]},
+  {id:"pre",name:"预学习",re:/预学习/,levels:()=>[["关预学习",{pre:false}]]},
+];
+
+/* ---------- 内置规则解析 ---------- */
+function ruleParse(text){
+  const t=String(text||"");
+  const warnings=[],guessed=[];
+  REJECTED.length=0;CLAMPED.length=0;
+  let usedAlgoTgt=false;
+  const cool=wantsCooling(t),heat=wantsHeating(t);
+  const bothSeason=cool&&heat;
+  const mode=(heat&&!cool)?"heating":"cooling";
+  const base={};
+  const contrastWeather=/(设计日|最冷|最热|极端|寒潮|酷暑)[^。；;]{0,20}(普通|典型|一般|平时|平常|两种天气)|(普通|典型|一般|平时|平常)[^。；;]{0,20}(设计日|最冷|最热|极端)|(再碰上|再加上|顺便|再看看|要是|如果|万一|碰上)[^。；;]{0,10}(最冷|最热|设计日|极端|寒潮|酷暑)/.test(t);
+  if(!bothSeason){
+    if(mode==="heating")
+      base.scen=(!contrastWeather&&/设计|极端|最冷|design\s*day/i.test(t))?"winter_design":"winter_typical";
+    else if(!contrastWeather&&/夏[^。，,]{0,4}设计日|设计日|极端高温|最热|下午.{0,4}降不下来|design\s*day/i.test(t))
+      base.scen="summer_design";
+  }
+  if(auxOff(t))base.aux=0;
+  const hits=AXES.map(a=>({a,list:a.build(t,mode),pos:axisPos(a,t),demoted:isDemoted(t,a)}))
+    .filter(x=>x.list.length>=1);
+  // 主对比优先"控制/设计"类轴；地区与季节是工况；用户明说是条件的（"条件上再看看X"）不参选
+  const ENV_AXES=new Set(["loc","scen"]);
+  const multiAll=hits.filter(x=>x.list.length>=2).sort((x,y)=>x.pos-y.pos);
+  const cand=multiAll.filter(x=>!x.demoted);
+  const pool=cand.length?cand:multiAll;
+  const multiCtl=pool.filter(x=>!ENV_AXES.has(x.a.id));
+  const multi=multiCtl.length?multiCtl.concat(pool.filter(x=>ENV_AXES.has(x.a.id)))
+                             :pool;
+  let compare=null,axisId=null;
+  if(multi.length){
+    compare=multi[0].list.map(([name,set])=>({name,set}));
+    axisId=multi[0].a.id;
+    if(axisId==="algo"){
+      const tg=AXES.find(a=>a.id==="algoTgt").build(t,mode);
+      if(tg.length>=2&&compare.some(a=>a.set.algo==="B")){
+        const rest=compare.filter(a=>a.set.algo!=="B");
+        compare=tg.map(([nm,st])=>({name:"B "+nm,set:st})).concat(rest);
+        usedAlgoTgt=true;
+      }
+    }
+  }
+  const conds=[],mergedSingles=[];
+  const usedDim=new Set([axisId]);
+  if(usedAlgoTgt)usedDim.add("algoTgt");
+  if(base.scen&&!bothSeason)usedDim.add("scen");   // 场景已由句子钉死，别再展开对立档
+  const putBase=(set,name,label)=>{
+    let changed=false;
+    for(const [k,v] of Object.entries(set))
+      if(base[k]===undefined){base[k]=v;changed=true;}
+    if(changed){
+      mergedSingles.push({name,label,set});
+      guessed.push(name+"（只点名一次，作为所有方案的共同设定："+label+"）");
+    }
+    return changed;
+  };
+  for(const h of multi.slice(1)){
+    if(usedDim.has(h.a.id))continue;
+    usedDim.add(h.a.id);
+    for(const [name,set] of h.list)conds.push({name,set,dim:h.a.name});
+  }
+  for(const h of hits.filter(x=>x.list.length===1)){
+    if(usedDim.has(h.a.id))continue;
+    usedDim.add(h.a.id);
+    const [label,set]=h.list[0];
+    // 追加语气（"也来一版""再加个"）是增量条件档，不是全局设定
+    if(nearCue(t,h.a.posRe||/$^/,ADD_CUE)&&!FIX_CUE.test(t)){
+      conds.push({name:label,set,dim:h.a.name});
+      guessed.push(h.a.name+"（听起来是追加一档，作为条件档；基线保持默认）");
+    }else putBase(set,h.a.name,label);
+  }
+  for(const d of DIMS){
+    if(usedDim.has(d.id)||!d.re.test(t))continue;
+    usedDim.add(d.id);
+    const explicit=d.nums?d.nums(t):[];
+    if(explicit.length===1){
+      const [label,set]=explicit[0];
+      if(nearCue(t,d.re,ADD_CUE)&&!FIX_CUE.test(t)){
+        conds.push({name:label,set,dim:d.name});
+        guessed.push(d.name+"（听起来是追加一档，作为条件档；基线保持默认）");
+      }else putBase(set,d.name,label);
+      continue;
+    }
+    const list=explicit.length>=2?explicit:d.levels(mode,t);
+    for(const [name,set] of list)conds.push({name,set,dim:d.name,guess:!(explicit.length>=2)});
+  }
+  // 只给一个值的可调参数 → 与默认值配成两臂；工况类变量不适用（"在达拉斯" 不等于要比城市）
+  const ENV_KEYS=new Set(["loc","scen","ins","ua","ach"]);
+  if(!compare&&!conds.length&&mergedSingles.length){
+    const m=mergedSingles[mergedSingles.length-1];
+    const keys=Object.keys(m.set);
+    const envOnly=keys.every(k=>ENV_KEYS.has(k));
+    const d=VAR_DEFS[keys[0]];
+    const tiny=d&&d[1]==="num"&&Math.abs(m.set[keys[0]]-P0[keys[0]])/(d[3]-d[2])<0.05;
+    const pinned=FIX_CUE.test(t);     // 用户说"固定在/就用"，那就是设定，不是要对比
+    if(!envOnly&&!tiny&&!pinned){
+      const def={},cur={};
+      for(const k of keys){def[k]=P0[k];cur[k]=m.set[k];delete base[k];}
+      const defLabel=Object.entries(def).map(([k,v])=>(VAR_DEFS[k]?VAR_DEFS[k][0]:k)+" "+v).join("，");
+      compare=[{name:"默认（"+defLabel+"）",set:def},{name:m.label,set:cur}];
+      guessed.push(m.name+"（只给了一个值，已与默认值配成两臂对比）");
+      mergedSingles.pop();
+    }
+  }
+  if(!compare){
+    if(conds.length)compare=[{name:"默认配置",set:{}}];
+    else if(REJECTED.length)compare=[{name:"默认配置",set:{}}];
+    else{
+      compare=[{name:"自动风",set:{fanCtrl:"auto"}},
+               {name:"两档风·1档",set:{fanCtrl:"two",twoStage:1}},
+               {name:"固定100%",set:{fanCtrl:"fixed"}}];
+      warnings.push("未识别到明确的对比对象，已按默认的三种风量模式对比——请在下方计划中确认或修改");
+    }
+  }
+  const ref={...P0,...base};
+  const seen=new Set();
+  const sameAsBase=[];
+  const uniq=conds.filter(c=>{
+    const k=JSON.stringify(c.set);
+    if(seen.has(k))return false;
+    if(setEqualsRef(c.set,ref)){          // 与默认/共同设定等价：不重复跑，但要在基线名里写清楚
+      if(!c.guess)sameAsBase.push(c.name);
+      return false;
+    }
+    seen.add(k);return true;
+  });
+  const baseName=sameAsBase.length?"基线（"+sameAsBase.join("、")+"）":"基线";
+  const conditions=[{name:baseName,set:{}},...uniq];
+  const byDim=new Map();
+  for(const c of uniq)if(c.guess){
+    if(!byDim.has(c.dim))byDim.set(c.dim,[]);
+    byDim.get(c.dim).push(c.name);
+  }
+  for(const [dim,names] of byDim)
+    guessed.push(dim+"（未给数值，取代表档位："+names.join(" / ")+"）");
+  const rejSeen=new Set();
+  for(const r of REJECTED){
+    const key=r.kw+"|"+r.bad.join(",");
+    if(rejSeen.has(key))continue;
+    rejSeen.add(key);
+    warnings.push("识别到 "+r.bad.join("/")+" 超出「"+r.kw.replace(/[()?:]|\\b/g,"").split("|")[0]
+      +"」可设范围 "+r.lo+"~"+r.hi+"，已忽略——请确认单位或改用范围内的值");
+  }
+  for(const c of CLAMPED)
+    warnings.push("识别到 "+c.bad.join("/")+" 超出「"+c.kw.replace(/[()?:]|\\b/g,"").split("|")[0]
+      +"」可设范围 "+c.lo+"~"+c.hi+"，已按边界值处理——若多个臂因此参数相同，请改用范围内可分辨的取值");
+  if(compare.length===1&&uniq.length===0)
+    warnings.push("没能从这句话里识别出任何对比对象或条件维度，当前计划只有 1 个方案、等于没有对照——"
+      +"请补充要对比什么（如「自动风和二档风」）或在哪些条件下对比（如「不同热负荷」）");
+  // 用户明说了方案个数就核对一下（"仨方案""三个方案"）
+  const cnt=t.match(/([2-9２-９两仨俩三四五六])\s*(个)?\s*(方案|版|组|种)/);
+  if(cnt){
+    const map={"两":2,"俩":2,"仨":3,"三":3,"四":4,"五":5,"六":6};
+    const want=map[cnt[1]]||+cnt[1].replace(/[２-９]/,c=>"０１２３４５６７８９".indexOf(c));
+    if(want&&want!==compare.length)
+      warnings.push("你提到"+cnt[0]+"，但只解析出 "+compare.length+" 个对比臂——请核对下方计划是否漏了某一项");
+  }
+  const runs=compare.length*conditions.length;
+  const dm=t.match(/(\d+(?:\.\d+)?)\s*天/);
+  // 预热时长：用户写了就用用户的（此前硬编码 24h，把"预热2小时"静默放大 12 倍）
+  const wm=t.match(/预热[^0-9]{0,4}(\d+(?:\.\d+)?)\s*(小时|h|H|天)?/);
+  const days=dm?+dm[1]:(runs<=40?3:2);
+  const warm=wm?(+wm[1]*(wm[2]==="天"?24:1)):24;
+  if(!dm||!wm)guessed.push("测量时长（每方案 "+days+" 天 + 预热 "+warm+" h"
+    +(wm?"，预热按你写的取）":"：湿平衡时间常数约 25h，预热不足会高估除湿量）"));
+  if(runs>24)warnings.push("方案数 "+runs+" 偏多，可在计划 JSON 里删掉几个条件档再跑");
+  return {days,warmup_h:warm,base,compare,conditions,focus:t,_warnings:warnings,_guessed:guessed};
+}
+
+/* ---------- 计划校验与展开 ---------- */
+function extractJson(t){
+  t=String(t).trim().replace(/^```(?:json)?\s*/i,"").replace(/```\s*$/,"").trim();
+  const i=t.indexOf("{"),j=t.lastIndexOf("}");
+  if(i<0||j<=i)return null;
+  try{return JSON.parse(t.slice(i,j+1));}catch(e){return null;}
+}
+function validatePlan(plan){
+  const warnings=[...(plan._warnings||[])];
+  const cleanSet=(o,where)=>{
+    const out={};
+    for(const [k,v0] of Object.entries(o||{})){
+      const d=VAR_DEFS[k];
+      if(!d){warnings.push(where+"：忽略未知变量 "+k);continue;}
+      let v=v0;
+      if(d[1]==="bool"){out[k]=v===true||v==="true";continue;}
+      if(d[1]==="enum"){
+        if(typeof d[2][0]==="number")v=+v;
+        if(!d[2].includes(v)){warnings.push(where+"：忽略 "+k+" 的非法取值 "+JSON.stringify(v0));continue;}
+        out[k]=v;continue;
+      }
+      v=+v;
+      if(v!==v){warnings.push(where+"：忽略 "+k+" 的非数值 "+JSON.stringify(v0));continue;}
+      const c=Math.min(d[3],Math.max(d[2],v));
+      if(c!==v)warnings.push(where+"："+k+" 超范围，已截取为 "+c);
+      out[k]=c;
+    }
+    return out;
+  };
+  const grp=(arr,label)=>(Array.isArray(arr)?arr:[]).map((v,i)=>({
+    name:String((v&&v.name)||label+(i+1)).slice(0,32),
+    set:cleanSet(v&&v.set,label+(i+1))}));
+  const days=Math.min(10,Math.max(0.25,+(plan.days??3)||3));
+  const warm=Math.min(96,Math.max(0,+(plan.warmup_h??24)||0));
+  const base=cleanSet(plan.base,"共同设定");
+  let compare=grp(plan.compare,"对比"),conditions=grp(plan.conditions,"条件");
+  const flat=grp(plan.variants,"方案");
+  // 扁平 variants（旧格式/外部大模型可能这么给）归一化为"单臂 × 条件档"，
+  // 这样计划 JSON 能原样往返，编辑后再运行不会丢方案
+  if(flat.length&&!compare.length){conditions=conditions.concat(flat);compare=[{name:"默认配置",set:{}}];}
+  if(!compare.length)compare=[{name:"默认配置",set:{}}];
+  if(!conditions.length)conditions=[{name:"基线",set:{}}];
+  // 物理有效性：两个臂若跑出来必然重合，这个对比就是假的。
+  // 本模型里 fanCtrl=fixed 与 two+twoStage=2 都是 100% 风量，是唯一一处这样的等价。
+  const airSig=st=>{
+    const fc=st.fanCtrl!==undefined?st.fanCtrl:base.fanCtrl!==undefined?base.fanCtrl:P0.fanCtrl;
+    const ts=st.twoStage!==undefined?st.twoStage:base.twoStage!==undefined?base.twoStage:P0.twoStage;
+    return (fc==="two"&&ts===2)?"fixed":fc;
+  };
+  if(compare.length>1){
+    const two2=compare.find(a=>a.set.fanCtrl==="two"&&(a.set.twoStage===2||a.set.twoStage===undefined));
+    const fixedArm=compare.find(a=>airSig(a.set)==="fixed"&&a!==two2);
+    if(two2&&fixedArm){
+      two2.set.twoStage=1;two2.name="两档风·1档";
+      warnings.push("固定100% 与两档风 2 档在本模型中等价（都是 100% 风量），"+
+        "排成两个臂会跑出两条重合曲线；已把两档风臂改为 1 档（70%）以形成有效对比");
+    }
+    const sigs=compare.map(a=>JSON.stringify(a.set));
+    const dup=sigs.filter((x,i)=>sigs.indexOf(x)!==i);
+    if(dup.length)warnings.push("有 "+dup.length+" 个对比臂的参数完全相同，跑出来必然重合——请检查计划");
+  }
+  // 单变量审计：对比臂之间只应差一个变量；每个条件档也只应改一个变量
+  const roots=a=>new Set(a.flatMap(x=>Object.keys(x.set).map(rootKey)));
+  if(compare.length>1){
+    const r=roots(compare);
+    if(r.size>1)warnings.push("对比臂之间改变了多个变量（"+[...r].join("、")+"），已不是单变量对比");
+  }
+  for(const c of conditions){
+    const r=roots([c]);
+    if(r.size>1)warnings.push("条件「"+c.name+"」一次改了多个变量（"+[...r].join("、")+"）");
+  }
+  const variants=[];
+  for(const c of conditions)for(const a of compare){
+    const nm=(conditions.length>1&&compare.length>1)?(a.name+" @ "+c.name)
+            :(compare.length>1?a.name:c.name);
+    // 臂覆盖条件档时，连同该变量的伴随参数一起覆盖，避免条件档的 tgtb/twoStage
+    // 残留到另一个臂上（例：B 的 Tes 目标留在 algo=C 的臂里）
+    const armRoots=new Set(Object.keys(a.set).map(rootKey));
+    const merged={};
+    for(const [k,v] of Object.entries(c.set))if(!armRoots.has(rootKey(k)))merged[k]=v;
+    Object.assign(merged,a.set);
+    variants.push({name:nm.slice(0,32),set:merged,arm:a.name,cond:c.name});
+  }
+  const notes=(Array.isArray(plan.notes)?plan.notes:[]).map(x=>String(x).slice(0,200)).slice(0,12);
+  return {days,warmup_h:warm,base,compare,conditions,variants,
+    focus:String(plan.focus||"").slice(0,500),warnings,
+    guessed:(plan._guessed||[]).concat(notes.map(n=>"模型说明："+n))};
+}
+function planForJson(vp){
+  return {days:vp.days,warmup_h:vp.warmup_h,base:vp.base,
+    notes:vp.guessed.filter(g=>g.startsWith("模型说明：")).map(g=>g.slice(5)),
+    compare:vp.compare.map(a=>({name:a.name,set:a.set})),
+    conditions:vp.conditions.map(c=>({name:c.name,set:c.set})),
+    focus:vp.focus};
+}
+
+/* ---------- 规模评估 ---------- */
+let stepRate=45000,rateCal=false;      // 步/秒，随实测更新
+try{stepRate=+localStorage.getItem("acStepRate")||45000;}catch(e){}
+function calibrateRate(){
+  // 用一份临时状态实测步进速率（resetAll 会新建 S，原状态对象保持完整，用完还原）
+  if(rateCal||expBusy)return;
+  const saved=S,savedP=JSON.parse(JSON.stringify(P));
+  try{
+    resetAll();
+    const t0=performance.now();
+    for(let i=0;i<4000;i++)stepOnce();
+    const r=4000/Math.max((performance.now()-t0)/1000,1e-6);
+    if(r>1000){stepRate=r;try{localStorage.setItem("acStepRate",String(Math.round(r)));}catch(e){}}
+    rateCal=true;
+  }catch(e){}
+  finally{S=saved;Object.assign(P,savedP);buildKpis();refreshSliders();refreshAll();}
+}
+function planStats(vp){
+  const stepsPer=Math.round((vp.warmup_h*3600+vp.days*DAY)/DT);
+  const runs=vp.variants.length;
+  return {runs,stepsPer,steps:runs*stepsPer,
+    simH:runs*(vp.warmup_h+vp.days*24),secs:runs*stepsPer/Math.max(stepRate,1000)};
+}
+const fmtDur=s=>s<90?s.toFixed(0)+" 秒":s<5400?(s/60).toFixed(1)+" 分钟":(s/3600).toFixed(1)+" 小时";
+
+/* ---------- 参数应用与批量运行 ---------- */
+function applyPlanConfig(cfg){
+  Object.assign(P,JSON.parse(JSON.stringify(P0)));   // 未提及变量 → 默认值
+  if(cfg.loc)P.loc=cfg.loc;
+  if(cfg.scen)P.scen=cfg.scen;
+  applyLocation(false);                              // 依地点/场景设气候、模式与默认设定温度
+  if(cfg.ins){P.ins=cfg.ins;P.ua=INS[cfg.ins].ua;P.ach=INS[cfg.ins].ach;}
+  for(const [k,v] of Object.entries(cfg)){
+    if(k==="loc"||k==="scen"||k==="ins")continue;
+    P[k]=v;
+  }
+  P.qr=P.tons*3.517;
+  if(P.algo==="B"&&cfg.tgtb===undefined)P.tgtb=nomTgt();
+  buildKpis();refreshSliders();
+  resetAll();
+}
+let expBusy=false,expAbort=false,expTotal=1,expDone=0,expT0=0;
+function expStatus(msg,err){
+  const el=document.getElementById("aiStatus");
+  el.textContent=msg;el.className="llm-status"+(err?" err":"");
+}
+function setProg(f){
+  const w=document.getElementById("aiProg");
+  if(f<0){w.hidden=true;return;}
+  w.hidden=false;
+  document.getElementById("aiBar").style.width=Math.min(100,f*100).toFixed(1)+"%";
+}
+async function runSteps(n,label){
+  const CH=3000;
+  for(let done=0;done<n;){
+    if(expAbort)throw new Error("已手动停止");
+    const k=Math.min(CH,n-done);
+    for(let i=0;i<k;i++)stepOnce();
+    done+=k;expDone+=k;
+    setProg(expDone/expTotal);
+    const el=(performance.now()-expT0)/1000;
+    if(el>0.5){
+      const rate=expDone/el;
+      if(rate>1000){stepRate=rate;try{localStorage.setItem("acStepRate",String(Math.round(rate)));}catch(e){}}
+      const left=(expTotal-expDone)/Math.max(rate,1);
+      expStatus(label+" · 进度 "+(expDone/expTotal*100).toFixed(0)+"%，预计剩余 "+fmtDur(left));
+    }
+    refreshAll();
+    await new Promise(r=>setTimeout(r,0));
+  }
+}
+async function runExperiment(plan){
+  expBusy=true;expAbort=false;expT0=performance.now();
+  document.getElementById("aiStopBtn").hidden=false;
+  document.getElementById("aiGoBtn").disabled=true;
+  document.getElementById("aiParseBtn").disabled=true;
+  const savedP=JSON.parse(JSON.stringify(P)),savedRun=running;
+  running=false;
+  const stepsWarm=Math.round(plan.warmup_h*3600/DT);
+  const stepsMeas=Math.round(plan.days*DAY/DT);
+  expTotal=Math.max(1,plan.variants.length*(stepsWarm+stepsMeas));expDone=0;
+  const newRecs=[];
+  try{
+    for(let i=0;i<plan.variants.length;i++){
+      const v=plan.variants[i];
+      const label="方案 "+(i+1)+"/"+plan.variants.length+"「"+v.name+"」";
+      expStatus(label+"：预热 "+plan.warmup_h+"h…");
+      applyPlanConfig({...plan.base,...v.set});
+      await runSteps(stepsWarm,label+" 预热");
+      resetStats(true);          // 保留预热期学到的算法状态，只清统计
+      await runSteps(stepsMeas,label+" 测量");
+      const rec=makeRecord("AI·"+v.name);   // 需在恢复参数前生成（desc 读取当前 P）
+      rec.arm=v.arm||null;rec.cond=v.cond||null;
+      newRecs.push(rec);
+    }
+    records.forEach(r=>r.baseline=false);
+    newRecs[0].baseline=true;
+    records.push(...newRecs);
+    saveRecords();renderRecords();
+    renderExpSummary(newRecs,plan);
+    lastPlan=plan;reportReady();
+    return newRecs;
+  }finally{
+    Object.assign(P,savedP);
+    buildKpis();refreshSliders();resetAll();
+    running=savedRun;
+    document.getElementById("playBtn").textContent=running?"暂停":"继续";
+    expBusy=false;setProg(-1);
+    document.getElementById("aiStopBtn").hidden=true;
+    document.getElementById("aiGoBtn").disabled=false;
+    document.getElementById("aiParseBtn").disabled=false;
+  }
+}
+
+/* ---------- 计划预览（评估）与结果摘要 ---------- */
+function planKv(o){
+  const ent=Object.entries(o||{});
+  if(!ent.length)return "（默认）";
+  return ent.map(([k,v])=>{const d=VAR_DEFS[k];return (d?d[0]:k)+" "+k+"="+v;}).join("，");
+}
+function renderPlan(vp,src){
+  const st=planStats(vp);
+  let html="<div class='note'>计划来源："+esc(src)+"　·　共同设定："+esc(planKv(vp.base))+"</div>";
+  if(/内置规则/.test(src))html+="<div class='note'>⚠ 当前走的是无 API 时的降级路径：内置规则只覆盖常见说法，"
+    +"复杂或口语化的需求建议在「API 配置」里接入大模型，由模型按平台接口契约编译计划。</div>";
+  html+="<div class='plan-stat'><span><b>"+st.runs+"</b> 个方案</span>"
+    +"<span>每个：预热 "+vp.warmup_h+" h + 测量 "+vp.days+" 天</span>"
+    +"<span>合计仿真 <b>"+st.simH.toFixed(0)+"</b> 机时</span>"
+    +"<span>预计耗时 <b>"+fmtDur(st.secs)+"</b></span></div>";
+  if(vp.compare.length>1){
+    html+="<h4>对比臂（每个条件下都跑一遍，臂间只差一个变量）</h4><ol>";
+    vp.compare.forEach((a,i)=>{html+="<li><b>"+esc(a.name)+"</b>"+(i===0?"（基准臂）":"")+"："+esc(planKv(a.set))+"</li>";});
+    html+="</ol>";
+  }
+  if(vp.conditions.length>1){
+    html+="<h4>条件维度（逐一调节，不做全交叉）</h4><ol>";
+    vp.conditions.forEach(c=>{html+="<li><b>"+esc(c.name)+"</b>："+esc(planKv(c.set))+"</li>";});
+    html+="</ol>";
+  }
+  if(vp.compare.length<=1&&vp.conditions.length<=1){
+    html+="<h4>方案</h4><ol>"+vp.variants.map(v=>"<li><b>"+esc(v.name)+"</b>："+esc(planKv(v.set))+"</li>").join("")+"</ol>";
+  }
+  if(vp.guessed.length)html+="<div class='note'>ℹ 未明确、已自动取值："+vp.guessed.map(esc).join("；")+"</div>";
+  if(vp.warnings.length)html+="<div class='note'>⚠ "+vp.warnings.map(esc).join("；")+"</div>";
+  if(vp.warmup_h<24)html+="<div class='note'>⚠ 预热不足 24 h：室内湿平衡时间常数约 25 h，"
+    +"除湿量与 RH 指标会被显著高估（实测 0.5h 预热比 24h 预热高出约 25% 除湿量）。</div>";
+  html+="<div class='note'>说明：预热段结束后只清统计、保留算法已学到的分箱负荷与 Tes/Tcs；"
+    +"各方案预热时长一致，测量窗口起始时刻相同。V1.44 的 Tes 自学习存在双稳态，"
+    +"绝对值会随预热落点变化，方案间的相对比较有效、绝对值不宜外推。</div>";
+  document.getElementById("aiPlan").innerHTML=html;
+}
+function focusMetrics(f,heating){
+  const s=new Set();
+  if(/达温|拉温|降温速度|升温速度|响应|快慢|制冷速度/.test(f)){s.add("t2");s.add("hz95");}
+  if(/除湿|湿度|潮/.test(f)){s.add("dehum");s.add("rh60");}
+  if(/舒适/.test(f)){s.add("t2");s.add("rmse");s.add("oob");s.add("rh60");}
+  if(/能耗|省电|耗电|效率|COP|电费/i.test(f))s.add("kwh");
+  if(/循环|启停|间隔/.test(f)){s.add("cyc");s.add("period");}
+  if(/辅热/.test(f))s.add("auxk");
+  if(/化霜/.test(f))s.add("defr");
+  if(!s.size)(heating?["auxk","defr","rmse"]:["dehum","rh60","rmse"]).forEach(k=>s.add(k));
+  if(heating){s.delete("dehum");s.delete("rh60");}   // 制热模式下除湿指标无意义
+  s.add("t2");s.add("kwh");        // 达温与能耗始终随行，便于看权衡
+  return REC_COLS.filter(c=>s.has(c[1]));
+}
+function deltaCell(v,b,dec,lowerBetter){
+  if(v==null||b==null)return "—";
+  let s=(+b).toFixed(dec)+" → "+(+v).toFixed(dec);
+  if(Math.abs(b)>1e-9){
+    const pct=(v-b)/Math.abs(b)*100;
+    const good=lowerBetter?pct<0:pct>0;
+    s+=" <span class='"+(good?"delta-good":"delta-bad")+"'>"+(pct>0?"+":"")+pct.toFixed(0)+"%</span>";
+  }
+  return s;
+}
+function renderExpSummary(recs,vp){
+  const heat=!!(vp&&vp.base&&/^winter/.test(vp.base.scen||""));
+  const cols=focusMetrics(vp&&vp.focus||"",heat);
+  const el=document.getElementById("aiSummary");
+  const arms=vp&&vp.compare?vp.compare.map(a=>a.name):[];
+  if(arms.length>=2&&recs.some(r=>r.arm)){
+    // 矩阵：行=条件，列=关注指标，单元格 = 基准臂 → 对比臂（Δ%）
+    const conds=vp.conditions.map(c=>c.name);
+    let html="<h4>对比矩阵：各条件下「"+esc(arms[0])+" → "+esc(arms.slice(1).join(" / "))+"」的变化</h4>"
+      +"<div class='records-wrap'><table class='records'><tr><th>条件</th>"
+      +(arms.length>2?"<th>对比臂</th>":"")
+      +cols.map(c=>"<th>"+c[0]+"</th>").join("")+"</tr>";
+    for(const cn of conds){
+      const inCond=recs.filter(r=>r.cond===cn);
+      const b=inCond.find(r=>r.arm===arms[0]);
+      if(!b)continue;
+      const others=inCond.filter(r=>r!==b);
+      others.forEach((o,i)=>{
+        html+="<tr>"+(i===0?"<td rowspan='"+others.length+"'><b>"+esc(cn)+"</b></td>":"")
+          +(arms.length>2?"<td>"+esc(o.arm)+"</td>":"")
+          +cols.map(c=>"<td>"+deltaCell(o.m[c[1]],b.m[c[1]],c[2],c[3])+"</td>").join("")+"</tr>";
+      });
+    }
+    html+="</table></div><div class='note'>每格为「"+esc(arms[0])+" 值 → 对比臂值（相对变化）」；绿色=该指标向好，红色=变差。</div>";
+    el.innerHTML=html;
+    return;
+  }
+  // 无对比臂：逐方案相对基准列差异
+  const base=recs[0];
+  let html="<h4>本地对比摘要（相对基准 "+esc(base.name)+"，仅列差异 ≥3% 的指标）</h4>";
+  if(recs.length<2)html+="<p class='note'>只有一个方案，无对比对象。</p>";
+  for(const r of recs.slice(1)){
+    const difs=[];
+    for(const [lab,k,dec,lowerBetter] of REC_COLS){
+      const v=r.m[k],b=base.m[k];
+      if(v==null||b==null||Math.abs(b)<1e-9)continue;
+      const pct=(v-b)/Math.abs(b)*100;
+      if(Math.abs(pct)<3)continue;
+      difs.push({lab,v,b,dec,pct,good:lowerBetter?pct<0:pct>0});
+    }
+    difs.sort((a,b2)=>Math.abs(b2.pct)-Math.abs(a.pct));
+    html+="<p><b>"+esc(r.name)+"</b>"+(difs.length?"：</p>":"：与基准各指标差异均 <3%</p>");
+    if(difs.length)html+="<ul>"+difs.slice(0,8).map(d=>
+      "<li>"+esc(d.lab)+"："+d.b.toFixed(d.dec)+" → "+d.v.toFixed(d.dec)
+      +"（<span class='"+(d.good?"delta-good":"delta-bad")+"'>"+(d.pct>0?"+":"")+d.pct.toFixed(0)+"%</span>）</li>").join("")+"</ul>";
+  }
+  el.innerHTML=html;
+}
+
+/* ---------- 解析提示词 ---------- */
+function buildParsePrompt(text){
+  const locMap=Object.entries(LOCATIONS).map(([k,v])=>v.name+"="+k).join("，");
+  const metricList=REC_COLS.map(c=>METRIC_DEFS[c[1]][0]).join("、");
+  const sys="你是空调控制算法仿真平台的「实验计划编译器」：把用户的自然语言测试需求，编译成本平台能直接执行的 JSON 实验计划。\n"+
+    "你的输出会被程序直接解析并驱动仿真，因此必须严格符合下面的接口契约。\n\n"+
+    "== 一、可设变量（这是平台的全部可调参数，键名必须逐字使用）==\n"+varCatalog()+
+    "\nloc 取值对照："+locMap+"\n\n"+
+    "== 二、输出 JSON 结构 ==\n"+
+    "{\n"+
+    '  "days": 每方案测量天数, number, 0.25~10, 默认 3\n'+
+    '  "warmup_h": 预热小时, number, 0~96, 默认 24（室内湿平衡时间常数约 25h，预热不足会高估除湿量；\n'+
+    '              用户明确说了预热多久就用用户的值，不要改）\n'+
+    '  "base": { 所有方案共同的设定，只写与默认值不同的键 }\n'+
+    '  "compare": [ { "name": "臂名", "set": { 相对 base 的改动 } }, ... ]\n'+
+    '  "conditions": [ { "name": "基线", "set": {} }, { "name": "条件档名", "set": { 单个变量 } }, ... ]\n'+
+    '  "focus": "用户关注的对比点（从原文提炼）"\n'+
+    '  "notes": [ "你做的每一处推断、替用户选的取值、以及你不确定的地方，一条一句中文" ]\n'+
+    "}\n"+
+    "实际执行的方案 = compare（对比臂）× conditions（条件档），共 |compare|×|conditions| 个。\n\n"+
+    "== 三、硬性规则 ==\n"+
+    "1. 只输出 JSON 本体：不要解释文字，不要 Markdown 代码围栏，不要注释。\n"+
+    "2. 只能使用第一节列出的键名。用户提到的东西如果平台没有对应变量，不要编造键名——写进 notes 说明无法覆盖。\n"+
+    "3. 用户没提到的变量一律不写（平台会用默认值）。\n"+
+    "4. compare = 用户点名要相互比较的对象。**臂与臂之间只能相差一个变量**；"+
+    "fanCtrl 与 twoStage、algo 与 tgtb/ta/dz/rate 属同一物理选择，可以同时给。\n"+
+    "   用户没点名对比对象时，compare 只放一个 {\"name\":\"默认配置\",\"set\":{}}。\n"+
+    "5. conditions = 用户说的\"在不同 X 条件下\"的每个 X，逐一调节：第一个必须是 {\"name\":\"基线\",\"set\":{}}，"+
+    "其后每档相对基线**只改一个变量**。不同的 X 之间不要交叉相乘"+
+    "（热负荷×湿度不要写成 4 档，各自 1~2 档即可）。\n"+
+    "6. 方案总数控制在 20 以内；确实需要更多时把 days 降到 1~1.5，并在 notes 说明。\n"+
+    "7. 取值必须落在第一节给出的范围内。用户给的值越界时，取最接近的合法值，并在 notes 里写明原值与替换值。\n"+
+    "8. tgtb（算法 B 的固定目标）与模式相关：制冷是蒸发温度 Tes，合法 4~14；制热是冷凝温度 Tcs，合法 38~52。"+
+    "不要把制热的 Tcs 写进制冷工况，反之亦然。\n"+
+    "9. 制热类需求把 base.scen 设为 winter_typical（极端工况用 winter_design）。"+
+    "除湿量与 RH 指标只在制冷模式有物理意义。\n"+
+    "10. 物理等价陷阱：本模型里 fanCtrl=\"fixed\" 与 fanCtrl=\"two\"+twoStage=2 都是 100% 风量，"+
+    "把它们排成两个臂会跑出两条完全重合的曲线。要对比两档风的低档价值时用 twoStage=1（70%）。\n"+
+    "11. 中文里的\"档\"多数是量词（\"UA 大一档\"\"回差带一档\"\"扫三档\"），只有明确在说内机风量时才是 fanCtrl。\n"+
+    "12. 陈述性前提（\"就用 C 算法\"\"房子按 medium\"\"在达拉斯\"）写进 base，不要拿它和默认值凑成一个对比臂；"+
+    "追加语气（\"顺便把保温差的也来一版\"）写成 conditions 的增量档，不要改 base。\n\n"+
+    "== 四、平台会输出的指标（供你写 focus 时对齐用语）==\n"+metricList+"\n\n"+
+    "== 五、示例 ==\n"+
+    "用户：对比自动风和二档风在不同热负荷、湿度负荷下的除湿表现\n"+
+    '{"days":3,"warmup_h":24,"base":{},'+
+    '"compare":[{"name":"自动风","set":{"fanCtrl":"auto"}},{"name":"两档风·2档","set":{"fanCtrl":"two","twoStage":2}}],'+
+    '"conditions":[{"name":"基线","set":{}},{"name":"高负荷·满足度70%","set":{"sat":70}},'+
+    '{"name":"低负荷·满足度130%","set":{"sat":130}},{"name":"高湿·新风200","set":{"vent":200}}],'+
+    '"focus":"除湿量、RH>60% 时间","notes":["热负荷未给数值，取满足度 70%/130% 两档","湿度负荷未给数值，取新风 200 m³/h"]}\n\n'+
+    "用户：波士顿冬天，辅热 3kW 跟 5kW 哪个更值，跑 2 天\n"+
+    '{"days":2,"warmup_h":24,"base":{"loc":"boston","scen":"winter_typical"},'+
+    '"compare":[{"name":"辅热3kW","set":{"aux":3}},{"name":"辅热5kW","set":{"aux":5}}],'+
+    '"conditions":[{"name":"基线","set":{}}],'+
+    '"focus":"辅热耗电与达温","notes":["未指明极端日，按典型冬日 winter_typical"]}';
+  return {sys,user:"用户实验需求：\n"+text};
+}
+
+/* ---------- 两阶段流程：解析评估 → 确认执行 ---------- */
+let pendingPlan=null;
+function showPending(vp,src){
+  pendingPlan=vp;
+  calibrateRate();          // 先实测步进速率，让"预计耗时"是真数
+  renderPlan(vp,src);
+  const box=document.getElementById("aiPlanJson");
+  box.value=JSON.stringify(planForJson(vp),null,1);
+  box.hidden=false;
+  document.getElementById("aiGoBtn").hidden=false;
+  document.getElementById("aiCancelBtn").hidden=false;
+  const st=planStats(vp);
+  expStatus("已生成实验计划："+st.runs+" 个方案，预计耗时 "+fmtDur(st.secs)
+    +"。核对无误后点「开始运行」；也可直接编辑下方计划 JSON 再运行。");
+}
+function clearPending(){
+  pendingPlan=null;
+  document.getElementById("aiPlanJson").hidden=true;
+  document.getElementById("aiGoBtn").hidden=true;
+  document.getElementById("aiCancelBtn").hidden=true;
+}
+document.getElementById("aiStopBtn").addEventListener("click",()=>{expAbort=true;});
+document.getElementById("aiCancelBtn").addEventListener("click",()=>{
+  clearPending();document.getElementById("aiPlan").innerHTML="";
+  expStatus("已取消该计划。可修改需求后重新解析。");
+});
+document.getElementById("aiPromptBtn").addEventListener("click",()=>{
+  const text=document.getElementById("aiInput").value.trim()||"（在此填写你的实验需求）";
+  const {sys,user}=buildParsePrompt(text);
+  const full=sys+"\n\n---\n\n"+user;
+  const box=document.getElementById("csvBox");
+  box.value=full;box.hidden=false;
+  const done=()=>expStatus("解析提示词已复制：粘贴到任意大模型，把返回的 JSON 粘贴回上方输入框后点「解析需求」。");
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(full).then(done,()=>expStatus("请在页面下方文本框手动全选复制。"));
+  else expStatus("请在页面下方文本框手动全选复制。");
+});
+document.getElementById("aiParseBtn").addEventListener("click",async()=>{
+  if(expBusy)return;
+  const text=document.getElementById("aiInput").value.trim();
+  if(!text){expStatus("请先输入实验需求（自然语言），或粘贴计划 JSON。",true);return;}
+  document.getElementById("aiSummary").innerHTML="";
+  clearPending();
+  let plan=null,src="";
+  const j=extractJson(text);
+  if(j&&(j.variants||j.compare||j.conditions)){plan=j;src="粘贴的计划 JSON";}
+  if(!plan&&llmCfgs.some(c=>c.on&&c.key)){
+    const pp=buildParsePrompt(text);
+    const res=await llmPoolCall(pp.sys,pp.user,2000,expStatus,"解析需求");
+    if(res.ok){
+      const pj=extractJson(res.txt);
+      if(pj&&(pj.variants||pj.compare||pj.conditions)){plan=pj;src=res.cfg.name+"（"+res.cfg.model+"）解析";}
+      else expStatus("API 返回无法解析为计划 JSON，改用内置规则…",true);
+    }else expStatus("API 解析失败（"+res.errs.join("；")+"），改用内置规则…",true);
+  }
+  if(!plan){plan=ruleParse(text);src=src||"内置规则解析";}
+  let vp=validatePlan(plan);
+  if(!vp.variants.length&&!/内置规则/.test(src)){      // 模型给了空计划 → 退回内置规则
+    vp=validatePlan(ruleParse(text));
+    src="内置规则解析（模型返回的计划为空）";
+  }
+  if(!vp.variants.length){expStatus("计划中没有有效方案，请调整需求描述。",true);return;}
+  showPending(vp,src);
+});
+document.getElementById("aiGoBtn").addEventListener("click",async()=>{
+  if(expBusy||!pendingPlan)return;
+  const box=document.getElementById("aiPlanJson");
+  let vp=pendingPlan;
+  const edited=extractJson(box.value);
+  if(edited){
+    const re=validatePlan(edited);
+    if(re.variants.length)vp=re;
+    else{expStatus("编辑后的计划没有有效方案，已按解析结果运行。",true);}
+  }else if(box.value.trim()){expStatus("计划 JSON 解析失败，已按解析结果运行。",true);}
+  renderPlan(vp,"待运行");
+  let recs;
+  try{recs=await runExperiment(vp);}
+  catch(err){expStatus("实验中止："+err.message,true);return;}
+  clearPending();
+  if(recs.length<2){expStatus("实验完成：1 个方案已记入对比表（无对比对象，未生成报告）。");return;}
+  const took=fmtDur((performance.now()-expT0)/1000);
+  if(llmCfgs.some(c=>c.on&&c.key)){
+    expStatus("仿真完成（耗时 "+took+"），正在生成分析报告…");
+    const rp=buildPrompt(recs,vp.focus);
+    const res=await llmPoolCall(rp.sys,rp.user,4096,llmStatus,"生成报告");
+    if(res.ok){
+      showReport(res);
+      expStatus("实验完成 ✓ "+recs.length+" 个方案已记入对比表（首个为基准），耗时 "+took
+        +"；分析报告见下方「LLM 方案分析报告」卡片。");
+    }else expStatus("实验完成（"+took+"），"+recs.length+" 个方案已记入对比表；报告生成失败（"
+      +res.errs.join("；")+"），可用「复制分析提示词」手动生成。",true);
+  }else{
+    expStatus("实验完成（耗时 "+took+"）："+recs.length+" 个方案已记入对比表（首个为基准），对比矩阵见下。"+
+      "未配置 API：可用「复制分析提示词」把数据交给任意大模型生成完整报告。");
+  }
+});
+
+/* ================= UI 绑定 ================= */
+const SLIDERS=[
+  ["p_tmean","v_tmean","tmean",1],["p_tamp","v_tamp","tamp",1],["p_dew","v_dew","dew",1],["p_solar","v_solar","solar",1],
+  ["p_ua","v_ua","ua",0],["p_ach","v_ach","ach",2],["p_vent","v_vent","vent",0],
+  ["p_qint","v_qint","qint",0],["p_mgain","v_mgain","mgain",2],
+  ["p_sat","v_sat","sat",0],["p_bias","v_bias","bias",0],["p_aux","v_aux","aux",0],
+  ["p_cfm","v_cfm","cfm",0],
+  ["p_ainit","v_ainit","autoInit",0],["p_await","v_await","autoWait",0],
+  ["p_aint","v_aint","autoInt",0],["p_astep","v_astep","autoStep",0],
+  ["p_fstart","v_fstart","fstart",0],["p_hold","v_hold","hold",0],["p_ramp","v_ramp","ramp",1],["p_fmax","v_fmax","fmax",0],
+  ["p_tset","v_tset","tset",1],["p_db","v_db","db",2],
+  ["p_tgtb","v_tgtb","tgtb",1],
+  ["p_ta","v_ta","ta",0],["p_dz","v_dz","dz",0],["p_rate","v_rate","rate",2],["p_cyc","v_cyc","cyc",1],
+];
+function refreshSliders(){
+  for(const [pid,vid,key,dec] of SLIDERS){
+    document.getElementById(pid).value=P[key];
+    document.getElementById(vid).textContent=(+P[key]).toFixed(dec);
+  }
+  document.getElementById("p_pre").checked=P.pre;
+  document.getElementById("insSel").value=P.ins;
+  document.getElementById("locSel").value=P.loc;
+  document.getElementById("scenSel").value=P.scen;
+  document.querySelectorAll("#algoSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.a===P.algo));
+  document.querySelectorAll("#fanSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.f===P.fan));
+  document.querySelectorAll("#tonSel .chip").forEach(c=>c.classList.toggle("on",+c.dataset.t===P.tons));
+  document.querySelectorAll("#fanCtrlSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.fc===P.fanCtrl));
+  document.querySelectorAll("#stageSel .chip").forEach(c=>c.classList.toggle("on",+c.dataset.s===P.twoStage));
+  document.getElementById("fanTwo").style.display=P.fanCtrl==="two"?"":"none";
+  document.getElementById("fanAuto").style.display=P.fanCtrl==="auto"?"":"none";
+  document.getElementById("algoB").style.display=P.algo==="B"?"":"none";
+  document.getElementById("algoC").style.display=P.algo==="C"?"":"none";
+  document.getElementById("tgtName").textContent=P.mode==="cooling"?"Tes":"Tcs";
+  renderReadouts();
+}
+function renderReadouts(){
+  const loc=LOCATIONS[P.loc];
+  document.getElementById("ro_zone").textContent=loc.zone+" · 夏 "+loc.db04+"℃ / 冬 "+loc.w996+"℃";
+  const dl=designLoad();
+  document.getElementById("ro_load").textContent=P.mode==="cooling"
+    ?(dl.sens/1000).toFixed(1)+" + "+(dl.lat/1000).toFixed(1)+" kW"
+    :"制热 "+(dl.heat/1000).toFixed(1)+" kW";
+  {const mInf=P.ach*160*2.7*RHO/3600, mVent=P.vent/3600*RHO;
+   const dwv=Math.max(0,wFromDew(P.dew)-0.0104);
+   document.getElementById("ro_moist").textContent=
+     (mInf*dwv*HFG).toFixed(0)+" / "+(mVent*dwv*HFG).toFixed(0)+" / "
+     +(P.mgain/3600*HFG).toFixed(0)+" W";}
+  const LS=loadScale();
+  const anchor=P.mode==="cooling"?dl.total:dl.heat;
+  document.getElementById("ro_sizing").textContent=
+    (anchor*LS/1000).toFixed(1)+" kW · ×"+LS.toFixed(2);
+  const pct=S?S.fanPct:1;
+  const ff=P.cfm*pct/400;
+  document.getElementById("ro_cfm").textContent=
+    (P.cfm*pct).toFixed(0)+"（"+(pct*100).toFixed(0)+"%）· BF "
+    +Math.pow(DEV.bf400,1/Math.max(ff,0.1)).toFixed(2);
+}
+for(const [pid,vid,key,dec] of SLIDERS){
+  document.getElementById(pid).addEventListener("input",e=>{
+    P[key]=+e.target.value;
+    document.getElementById(vid).textContent=(+P[key]).toFixed(dec);
+    renderReadouts();
+  });
+}
+function applyLocation(reset){
+  const sp=scenParams(LOCATIONS[P.loc],P.scen);
+  const modeChanged=sp.mode!==P.mode;
+  P.mode=sp.mode;P.tmean=sp.tmean;P.tamp=sp.tamp;P.dew=sp.dew;P.solar=sp.solar;
+  P.tset=P.mode==="cooling"?24.5:21.1;
+  if(P.algo==="B")P.tgtb=nomTgt();
+  buildKpis();
+  refreshSliders();
+  if(reset||modeChanged)resetAll();
+}
+document.getElementById("locSel").addEventListener("change",e=>{P.loc=e.target.value;applyLocation(true);});
+document.getElementById("scenSel").addEventListener("change",e=>{P.scen=e.target.value;applyLocation(true);});
+document.getElementById("insSel").addEventListener("change",e=>{
+  P.ins=e.target.value;P.ua=INS[P.ins].ua;P.ach=INS[P.ins].ach;refreshSliders();
+});
+document.getElementById("p_pre").addEventListener("change",e=>{P.pre=e.target.checked;resetStats();refreshAll();});
+document.getElementById("tonSel").addEventListener("click",e=>{
+  const t=e.target.dataset.t;if(!t)return;
+  P.tons=+t;P.qr=P.tons*3.517;refreshSliders();
+});
+document.getElementById("fanCtrlSel").addEventListener("click",e=>{
+  const fc=e.target.dataset.fc;if(!fc)return;
+  P.fanCtrl=fc;refreshSliders();
+});
+document.getElementById("stageSel").addEventListener("click",e=>{
+  const s=e.target.dataset.s;if(!s)return;
+  P.twoStage=+s;refreshSliders();
+});
+document.getElementById("algoSel").addEventListener("click",e=>{
+  const a=e.target.dataset.a;if(!a)return;
+  P.algo=a;if(a==="B")P.tgtb=nomTgt();
+  resetStats();refreshSliders();refreshAll();
+});
+document.getElementById("fanSel").addEventListener("click",e=>{
+  const f=e.target.dataset.f;if(!f)return;
+  P.fan=f;
+  document.querySelectorAll("#fanSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.f===f));
+});
+document.getElementById("winSel").addEventListener("click",e=>{
+  const w=e.target.dataset.w;if(w===undefined)return;
+  winLen=+w;
+  document.querySelectorAll("#winSel .chip").forEach(c=>c.classList.toggle("on",c.dataset.w===w));
+});
+let running=true;
+document.getElementById("playBtn").addEventListener("click",()=>{
+  running=!running;
+  document.getElementById("playBtn").textContent=running?"暂停":"继续";
+});
+document.getElementById("resetBtn").addEventListener("click",resetAll);
+document.getElementById("statBtn").addEventListener("click",()=>{resetStats();refreshAll();});
+
+/* ================= 主循环 ================= */
+function refreshAll(){renderKpis();renderAlgoPanel();renderCharts();renderReadouts();}
+let lastReal=performance.now(),carry=0,lastUi=0;
+function frame(now){
+  const dtReal=Math.min(0.25,(now-lastReal)/1000);lastReal=now;
+  if(running&&!expBusy){
+    const speed=+document.getElementById("speed").value;
+    carry+=dtReal*speed/DT;
+    let steps=Math.min(6000,Math.floor(carry));
+    carry-=steps;
+    while(steps-->0)stepOnce();
+  }
+  document.getElementById("clock").textContent=fmtClock(S.t);
+  if(now-lastUi>120){lastUi=now;refreshAll();}
+  requestAnimationFrame(frame);
+}
+// 初始化
+document.getElementById("locSel").innerHTML=Object.entries(LOCATIONS)
+  .map(([k,v])=>'<option value="'+k+'">'+v.name+'</option>').join("");
+applyLocation(false);
+buildKpis();
+refreshSliders();
+resetAll();
+renderRecords();
+reportReady();
+requestAnimationFrame(frame);
+window.addEventListener("resize",renderCharts);
+</script>

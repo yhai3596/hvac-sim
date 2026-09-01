@@ -1,0 +1,111 @@
+# 从 GitHub Actions 部署到自有服务器。
+#
+# 需要先在仓库 Settings → Secrets and variables → Actions 里加三个 secret：
+#   DEPLOY_HOST     服务器 IP 或域名
+#   DEPLOY_SSH_KEY  可登录该服务器的私钥全文（-----BEGIN ... END----- 都要）
+#   DEPLOY_DOMAIN   站点域名，例如 hvac.geopro.top
+# 可选：DEPLOY_USER（默认 root）、DEPLOY_PORT（默认 22）、DEPLOY_EMAIL（证书通知邮箱）
+#
+# 部署动作本身就是把仓库里的 deploy/install.sh 通过 stdin 喂给服务器执行——服务器上跑的
+# 永远是本次 checkout 的那份脚本，不存在"服务器上的脚本是旧版"的问题。
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_tls:
+        description: 只配 HTTP，不申请证书（DNS 尚未生效时选 true）
+        type: boolean
+        default: false
+      auto_update:
+        description: 在服务器上安装每 30 分钟自动拉取更新的 timer
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-server        # 同时只允许一个部署在跑
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查必需的 secret
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
+        run: |
+          missing=""
+          [ -n "$HOST" ]   || missing="$missing DEPLOY_HOST"
+          [ -n "$KEY" ]    || missing="$missing DEPLOY_SSH_KEY"
+          [ -n "$DOMAIN" ] || missing="$missing DEPLOY_DOMAIN"
+          if [ -n "$missing" ]; then
+            echo "::error::缺少 secret：$missing —— 在仓库 Settings → Secrets and variables → Actions 里添加"
+            exit 1
+          fi
+
+      - name: 准备 SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # 首次连接采用 TOFU 记录主机指纹；对安全性有更高要求可改成把已知指纹写死在这里
+          ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "已记录主机指纹："
+          ssh-keygen -lf ~/.ssh/known_hosts | sed 's/^/  /'
+
+      # 把源码打包推过去，而不是让服务器自己 git clone——国内服务器往往连不上 github.com
+      - name: 执行部署
+        id: deploy
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+          DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
+          EMAIL: ${{ secrets.DEPLOY_EMAIL }}
+          SKIP_TLS: ${{ inputs.skip_tls && '1' || '0' }}
+          AUTO_UPDATE: ${{ inputs.auto_update && '1' || '0' }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -o pipefail
+          U="${USER_NAME:-root}"; P="${PORT:-22}"
+          tar czf /tmp/payload.tgz --exclude=.git --exclude=dist .
+          echo "源码包 $(du -h /tmp/payload.tgz | cut -f1)，推送到 $U@$HOST:$P"
+          scp -i ~/.ssh/id_deploy -P "$P" -o BatchMode=yes /tmp/payload.tgz "$U@$HOST:/tmp/hvac-payload.tgz"
+          ssh -i ~/.ssh/id_deploy -p "$P" -o BatchMode=yes "$U@$HOST" bash -s <<REMOTE
+          set -e
+          rm -rf /tmp/hvac-src && mkdir -p /tmp/hvac-src
+          tar xzf /tmp/hvac-payload.tgz -C /tmp/hvac-src
+          rm -f /tmp/hvac-payload.tgz
+          sudo env DOMAIN='$DOMAIN' EMAIL='$EMAIL' SKIP_TLS='$SKIP_TLS' AUTO_UPDATE='$AUTO_UPDATE' \
+               BRANCH='$BRANCH' SRC_DIR=/tmp/hvac-src bash /tmp/hvac-src/deploy/install.sh
+          REMOTE
+
+      # 部署真的跑过才验收：否则（比如缺 secret 提前退出）会刷出一堆无意义的告警
+      - name: 验收（从 runner 实际访问站点）
+        if: always() && steps.deploy.outcome != 'skipped'
+        env:
+          DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
+        run: |
+          echo "--- HTTP ---"
+          curl -sS -m 20 -i "http://$DOMAIN/" | head -15 || echo "HTTP 访问失败"
+          echo "--- HTTPS ---"
+          curl -sS -m 20 -i "https://$DOMAIN/" | head -15 || echo "HTTPS 访问失败（证书可能还没签发）"
+          echo "--- 页面特征自检 ---"
+          body=$(curl -sS -m 20 -L "https://$DOMAIN/" || curl -sS -m 20 -L "http://$DOMAIN/" || true)
+          case "$body" in
+            *"<!doctype html>"*) echo "  doctype: OK（标准模式）" ;;
+            *) echo "  ::warning::没抓到 doctype，页面可能没构建成功" ;;
+          esac
+          case "$body" in
+            *"空调控制算法"*) echo "  中文正文: OK（编码正常）" ;;
+            *) echo "  ::warning::中文正文没匹配上，检查 charset" ;;
+          esac
