@@ -55,8 +55,36 @@ jobs:
           PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/id_deploy
+          # 粘贴私钥进 secret 时有两种常见事故，都会让 OpenSSH 只报一句
+          # "error in libcrypto"：在 Windows 上复制带进了 CRLF；整段被挤成一行。
+          # 两者都是可以就地修好的，先修再用，修不好的情况下面会给出明确报错。
+          printf '%s\n' "$KEY" | tr -d '\r' | sed -e 's/[[:space:]]*$//' > ~/.ssh/id_deploy
+          if [ "$(grep -c . ~/.ssh/id_deploy)" -le 1 ]; then
+            echo "私钥挤成了一行，按 PEM 规则重新折行"
+            python3 - <<'PY'
+          import os, pathlib, re
+          p = pathlib.Path(os.path.expanduser("~/.ssh/id_deploy"))
+          s = p.read_text()
+          m = re.match(r"\s*-----BEGIN ([A-Z0-9 ]+?)-----(.*?)-----END \1-----\s*\Z", s, re.S)
+          if m:
+              kind, body = m.group(1), re.sub(r"\s+", "", m.group(2))
+              wrapped = "\n".join(body[i:i + 64] for i in range(0, len(body), 64))
+              p.write_text(f"-----BEGIN {kind}-----\n{wrapped}\n-----END {kind}-----\n")
+              print("  已折行")
+          else:
+              print("  不是完整的 PEM 信封，保持原样")
+          PY
+          fi
           chmod 600 ~/.ssh/id_deploy
+          # 先验证私钥本身能被解析，免得把格式问题拖到 scp 那步才以 255 糊掉
+          if ! ssh-keygen -y -P "" -f ~/.ssh/id_deploy > ~/.ssh/id_deploy.pub 2>/tmp/keyerr </dev/null; then
+            echo "::error::DEPLOY_SSH_KEY 解析失败：$(tr '\n' ' ' < /tmp/keyerr)"
+            echo "::error::常见原因：私钥带口令（部署密钥请用无口令的）；只粘了 key 体没带 BEGIN/END 行；粘的是 PuTTY 的 .ppk（需先用 puttygen 导出 OpenSSH 格式）"
+            exit 1
+          fi
+          echo "私钥 OK：$(ssh-keygen -lf ~/.ssh/id_deploy.pub)"
+          echo "对应公钥（服务器 ~/.ssh/authorized_keys 里必须有这一行，否则会被 Permission denied 拒掉）："
+          sed 's/^/  /' ~/.ssh/id_deploy.pub
           # 首次连接采用 TOFU 记录主机指纹；对安全性有更高要求可改成把已知指纹写死在这里
           ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
           echo "已记录主机指纹："
