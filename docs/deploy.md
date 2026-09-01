@@ -376,6 +376,39 @@ HTTP 站点仍然可用。
 
 ---
 
+### 2.8 用 GitHub Actions 部署（不想自己 ssh 上服务器时）
+
+`.github/workflows/deploy.yml` 把 §2.7 的脚本挪到 Actions runner 上执行：runner ssh 进服务器，
+把**本次 checkout 的** `deploy/install.sh` 通过 stdin 喂给它跑，跑完再从 runner 实际访问站点做验收。
+好处是部署过程有完整日志、脚本版本不会漂移，也不必在本地准备任何东西。
+
+先在仓库 **Settings → Secrets and variables → Actions** 加三个 secret：
+
+| Secret | 值 |
+| --- | --- |
+| `DEPLOY_HOST` | 服务器 IP 或域名 |
+| `DEPLOY_SSH_KEY` | 能登录该服务器的私钥全文（含 `-----BEGIN/END-----` 两行） |
+| `DEPLOY_DOMAIN` | 站点域名 |
+
+可选：`DEPLOY_USER`（默认 root）、`DEPLOY_PORT`（默认 22）、`DEPLOY_EMAIL`（证书通知邮箱）。
+
+然后到 **Actions → deploy → Run workflow**，两个开关：`skip_tls`（DNS 没生效时先只配 HTTP）、
+`auto_update`（是否装服务器端的自动更新 timer）。
+
+日志末尾的「验收」步骤会打印站点的 HTTP/HTTPS 响应头，并检查页面里有没有 `<!doctype html>`
+和中文正文——这两项能一次性暴露"构建没成功"和"编码不对"两类问题。
+
+**安全上要想清楚的一点**：这等于把一把能登录服务器的私钥交给 GitHub 保管，此后任何有本仓库
+写权限的人都能通过点一下 Run workflow 在你的服务器上执行命令。建议：
+
+- 专门生成一把只用于部署的密钥（`ssh-keygen -t ed25519 -f deploy_key`），不要复用你的日常密钥；
+- 服务器 `~/.ssh/authorized_keys` 里给这把 key 加 `from="<GitHub runner 出口段>"` 或改用堡垒机；
+- 不需要持续部署时，把这个 workflow 文件删掉或在 Actions 里禁用即可，secret 也一并删除。
+
+不接受这个取舍就走 §2.7，自己在服务器上跑一次脚本，效果完全相同。
+
+---
+
 ## 三、常见问题
 
 | 现象 | 原因与处理 |

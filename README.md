@@ -27,6 +27,7 @@
 | `启动仿真台.command` / `.bat` | macOS / Windows 双击入口，日常使用不用敲命令 |
 | [`docs/deploy.md`](docs/deploy.md) | 本地使用与服务器部署指南（含 CORS/API Key 的两种处理方式） |
 | [`deploy/install.sh`](deploy/install.sh) | 服务器一键部署：装依赖 + 拉代码 + 构建 + nginx + HTTPS + 自动更新 timer（幂等，支持 `DRY_RUN=1`） |
+| [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | 从 GitHub Actions 一键部署到服务器并自动验收（需配 3 个 secret） |
 | [`eval/`](eval/) | 智能助手 LLM 解析路径评测：真实提示词 → 模型 → 校验 → 执行，七维打分 + 反向对照 |
 
 ## 快速开始

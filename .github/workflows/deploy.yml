@@ -63,6 +63,7 @@ jobs:
           ssh-keygen -lf ~/.ssh/known_hosts | sed 's/^/  /'
 
       - name: 执行部署
+        id: deploy
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
           USER_NAME: ${{ secrets.DEPLOY_USER }}
@@ -79,8 +80,9 @@ jobs:
               "sudo env DOMAIN='$DOMAIN' EMAIL='$EMAIL' SKIP_TLS='$SKIP_TLS' AUTO_UPDATE='$AUTO_UPDATE' BRANCH='$BRANCH' bash -s" \
               < deploy/install.sh
 
+      # 部署真的跑过才验收：否则（比如缺 secret 提前退出）会刷出一堆无意义的告警
       - name: 验收（从 runner 实际访问站点）
-        if: always()
+        if: always() && steps.deploy.outcome != 'skipped'
         env:
           DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
         run: |
