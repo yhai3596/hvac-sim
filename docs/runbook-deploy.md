@@ -51,7 +51,7 @@ curl -sS https://你的域名/ | grep -c '空调控制算法'      # 应输出 �
 | 情况 | 走哪条 | 命令 |
 | --- | --- | --- |
 | `github.com` 通 | git clone | 默认，什么都不用做 |
-| 只有 `codeload.github.com` 通 | HTTPS 源码包 | 脚本自动兜底；或手动 `curl -fL -o /tmp/hvac.tgz "https://codeload.github.com/yhai3596/hvac-sim/tar.gz/refs/heads/<分支>"` |
+| 只有 `codeload.github.com` 通 | HTTPS 源码包 | 脚本自动兜底；或手动 `curl -fL -o /tmp/hvac.tgz "https://codeload.github.com/yhai3596/hvac-sim/tar.gz/refs/heads/main"` |
 | 全都不通 | 本地打包传过去 | 见下方 §2.1.1 |
 
 **只有 git 这条路能用自动更新 timer**（其余两条没有 git 元数据，脚本会明确告诉你并跳过）。
@@ -116,7 +116,10 @@ sudo DOMAIN=你的域名 EMAIL=你的邮箱 bash deploy/install.sh
 | --- | --- |
 | git 路径 | `systemctl start hvac-sim-update.service`，或等 30 分钟的 timer |
 | 源码包 / 离线 | 重新取一次代码再跑一遍 `install.sh`（幂等） |
-| GitHub Actions | Actions → deploy → Run workflow（见 `deploy.md` §2.8） |
+| GitHub Actions | Actions → deploy → Run workflow，分支选 `main`（见 `deploy.md` §2.8） |
+
+timer 只在 `$APP_DIR` 是 git 工作副本时才装。源码包与 Actions 这两条路下 `$APP_DIR` 通常没有
+`.git`，脚本会明确跳过并在日志里说明——**这两种部署没有后台自动更新，更新就是再跑一次部署**。
 
 ### 3.3 开启大模型 API 反代（可选）
 
@@ -209,6 +212,34 @@ sudo caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile | grep -c /op
 
 ---
 
+### 5.8 GitHub Actions 部署连不上服务器
+
+两个卡点，都只给一句含糊的报错，按下面区分：
+
+| 日志里的话 | 含义 | 处理 |
+| --- | --- | --- |
+| `Load key ...: error in libcrypto` | `DEPLOY_SSH_KEY` 不是一份能解析的私钥 | 工作流会打印「形状」（非空行数、首尾标识行）。带 CRLF / 挤成一行 / 漏 `BEGIN`-`END` 会自动修；带口令、`.ppk`、粘贴截断需重贴。见 `deploy.md` §2.8 |
+| `Permission denied (publickey,password)` | 钥匙能用，但服务器不认 | 见下 |
+
+`Permission denied` 的排查顺序：
+
+```bash
+# 1) 工作流日志里看协商摘要：有 Offering public key、没有 Server accepts key → 服务器不认这把钥匙
+# 2) 服务器侧看鉴权日志
+sudo journalctl -u ssh -n 50 --no-pager | grep -i -E 'sshd|refused|denied'
+#    Connection closed by authenticating user root <IP>  → 该用户下没有这把公钥
+#    bad ownership or modes for directory ...            → 权限/属主不对
+# 3) 比对指纹（空文件会报 is not a public key file）
+sudo ssh-keygen -lf /root/.ssh/authorized_keys
+sudo sshd -T | grep -Ei 'permitrootlogin|pubkeyauthentication|authorizedkeysfile'
+```
+
+最常见的一种：公钥加到了自己平时登录的那个用户（在 `ubuntu@` 提示符下敲 `~/.ssh/authorized_keys`
+就是 `/home/ubuntu/...`），而工作流 `DEPLOY_USER` 没设、默认以 root 登录。两条出路——把公钥复制一份
+到 `/root/.ssh/authorized_keys`，或加 `DEPLOY_USER` secret 填那个普通用户（需免密 sudo）。
+
+---
+
 ## 6. 回滚
 
 | 改动 | 回滚 |
@@ -232,3 +263,7 @@ sudo caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile | grep -c /op
 | 80/443 | 已被 Caddy 占用，同机还有 7 个其他域名 |
 | 主 Caddyfile | 一个站点块列 8 个域名（含本域名）统统指向 `/usr/share/caddy`，**无 import 行** |
 | 最终方案 | codeload 取包 → `SRC_DIR` 离线安装 → 并入 Caddy → 证书由 Caddy 自动签 |
+| 部署分支 | `main`（`install.sh` 的 `BRANCH` 默认值、文档安装地址、工作流传入值都跟它） |
+| SSH | `PermitRootLogin yes`、`PubkeyAuthentication yes`；`/root/.ssh` 权限属主正常 |
+| 首次配 Actions 时踩到的 | `DEPLOY_SSH_KEY` 只贴了 key 体（漏 `BEGIN`/`END`）；部署公钥加在了 `ubuntu` 名下而工作流默认以 root 登录，`/root/.ssh/authorized_keys` 当时是 0 字节 |
+| 自动更新 | 无。`/opt/hvac-sim` 不是 git 工作副本，timer 未安装；更新走 Actions 手动触发 |

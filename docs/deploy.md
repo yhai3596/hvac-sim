@@ -316,6 +316,11 @@ Caddy 会自动申请并续期 Let's Encrypt 证书。用 nginx 则配 certbot�
 
 ### 2.6 更新流程
 
+已经按 §2.8 配好 GitHub Actions 的话，更新就是**点一次 Run workflow**（分支选 `main`），
+runner 会把最新代码推到服务器重新构建，末尾自带验收。
+
+自己发布则是三步：
+
 ```bash
 git pull
 python3 web/serve.py --build
@@ -434,16 +439,76 @@ github.com。部署过程有完整日志，脚本版本也不会漂移。
 | Secret | 值 |
 | --- | --- |
 | `DEPLOY_HOST` | 服务器 IP 或域名 |
-| `DEPLOY_SSH_KEY` | 能登录该服务器的私钥全文（含 `-----BEGIN/END-----` 两行） |
+| `DEPLOY_SSH_KEY` | 能登录该服务器的私钥**全文**，含 `-----BEGIN/END-----` 两行（见下） |
 | `DEPLOY_DOMAIN` | 站点域名 |
 
 可选：`DEPLOY_USER`（默认 root）、`DEPLOY_PORT`（默认 22）、`DEPLOY_EMAIL`（证书通知邮箱）。
 
-然后到 **Actions → deploy → Run workflow**，两个开关：`skip_tls`（DNS 没生效时先只配 HTTP）、
-`auto_update`（是否装服务器端的自动更新 timer）。
+#### 私钥怎么贴（这一步最容易出错）
+
+正确做法是把私钥文件**整个**贴进去，一个字符都不改：
+
+```bash
+ssh-keygen -t ed25519 -N '' -C github-actions -f deploy_key   # 专用、无口令
+cat deploy_key            # 从 -----BEGIN 到 -----END 全选复制，贴进 DEPLOY_SSH_KEY
+```
+
+贴错的几种方式都只会换来同一句 `Load key ...: error in libcrypto`，看不出是哪一种：
+
+| 事故 | 工作流的处理 |
+| --- | --- |
+| 在 Windows 上复制，带进了 CRLF | 自动去掉 CR |
+| 整段被挤成一行 | 按 PEM 规则自动折行 |
+| 只贴了 key 体，漏了 `BEGIN`/`END` 两行 | 按 key 体类型（`openssh-key-v1` / DER）自动补回信封 |
+| 私钥带口令、贴的是 PuTTY `.ppk`、粘贴时截断 | 修不了，直接失败，并打印「形状」（非空行数、首尾标识行）指明是哪一类 |
+
+自动修复只是兜底。日志里出现「补上信封」「已折行」时，最好回头把 secret 重贴一遍。
+
+#### 公钥加在哪个用户下
+
+工作流以 `DEPLOY_USER` 登录，**没设时是 `root`，不是你平时登录的那个用户**。公钥必须在那个用户的
+`authorized_keys` 里。写死路径，别用 `~`——你在 `ubuntu@` 提示符下敲的 `~` 是 `/home/ubuntu`：
+
+```bash
+# 走默认的 root：
+sudo mkdir -p /root/.ssh && sudo chmod 700 /root/.ssh
+echo '<deploy_key.pub 那一行>' | sudo tee -a /root/.ssh/authorized_keys
+sudo chmod 600 /root/.ssh/authorized_keys
+```
+
+不想给 root 开这个口，就把公钥留在普通用户下，另加一个 `DEPLOY_USER` secret 填该用户名。注意
+`install.sh` 是用 `sudo` 跑的，该用户需要**免密 sudo**（`NOPASSWD`），否则非交互会话提不了权——
+工作流会先 `sudo -n true` 探一次并直接说明。
+
+然后到 **Actions → deploy → Run workflow**，分支选 `main`，两个开关：`skip_tls`（DNS 没生效时先只配
+HTTP）、`auto_update`（是否装服务器端的自动更新 timer；这条路下通常装不上，见下）。
 
 日志末尾的「验收」步骤会打印站点的 HTTP/HTTPS 响应头，并检查页面里有没有 `<!doctype html>`
-和中文正文——这两项能一次性暴露"构建没成功"和"编码不对"两类问题。
+和中文正文——这两项能一次性暴露"构建没成功"和"编码不对"两类问题。响应头里的 `content-length`
+与 `last-modified` 还能用来核对线上确实换成了这次的构建产物。
+
+#### 这条路下没有自动更新 timer
+
+Actions 部署走的是 `SRC_DIR=` 离线模式（源码是 runner tar 推过去的）。`install.sh` 只在
+`$APP_DIR` 是 git 工作副本时才装/刷新 timer，否则明确跳过并在日志里说明。所以**用 Actions 部署的站点，
+更新方式就是再点一次 Run workflow**，没有后台定时拉取。
+
+这个判据是按「目录是不是 git 副本」而不是「本次源码怎么来的」来判的：否则服务器上那份指向旧分支的
+旧 timer 会原样留着，半小时后把站点 `reset` 回旧分支、抹掉刚部署的内容。
+
+#### 鉴权失败怎么查
+
+`scp` 只会给一句 `Permission denied (publickey,password)`。按这个顺序：
+
+1. **看工作流日志**——鉴权失败时会打印 `ssh -vv` 的协商摘要。出现 `Offering public key: ... SHA256:xxx`
+   之后紧跟 `Authentications that can continue`、却没有 `Server accepts key`，说明钥匙递对了、是服务器不认。
+2. **看服务器的鉴权日志**——`sudo journalctl -u ssh -n 50 --no-pager`。`Connection closed by authenticating
+   user root <IP>` 表示那个用户下没有这把公钥；`bad ownership or modes` 表示权限不对。
+3. **比对指纹**——工作流日志里印了这把私钥对应的公钥，服务器上 `sudo ssh-keygen -lf
+   /root/.ssh/authorized_keys` 应能看到同一个 `SHA256:`。注意空文件会报 `is not a public key file`。
+
+另外确认 `sudo sshd -T | grep -i permitrootlogin`：值为 `no` 时 root 走公钥也会被拒，改成
+`prohibit-password` 再 `systemctl reload ssh`。
 
 **安全上要想清楚的一点**：这等于把一把能登录服务器的私钥交给 GitHub 保管，此后任何有本仓库
 写权限的人都能通过点一下 Run workflow 在你的服务器上执行命令。建议：
@@ -469,7 +534,10 @@ github.com。部署过程有完整日志，脚本版本也不会漂移。
 | 部署后打不开，浏览器一直转圈 | 九成是云控制台安全组没放行 80/443。先在服务器上 `curl -I http://127.0.0.1/` 确认 nginx 本机正常 |
 | 部署后 `/api/` 返回 502 | 反代服务没起来：`systemctl status hvac-sim-proxy`、`journalctl -u hvac-sim-proxy -n 50` |
 | certbot 申请证书失败 | 多半是 80 端口没放行或 DNS 未生效。站点仍可用 HTTP 访问，解析好后重跑脚本即可 |
-| 服务器上改了文件，自动更新把改动冲掉了 | 设计如此：`hvac-sim-update.service` 用 `git reset --hard` 与远端对齐。要在服务器改就先 `systemctl disable --now hvac-sim-update.timer` |
+| 服务器上改了文件，自动更新把改动冲掉了 | 设计如此：`hvac-sim-update.service` 用 `git reset --hard` 与远端对齐。要在服务器改就先 `systemctl disable --now hvac-sim-update.timer`。注意只有 git 路径部署才有这个 timer，Actions 部署下不存在（见 §2.8） |
+| Actions 部署报 `error in libcrypto` | `DEPLOY_SSH_KEY` 不是一份能解析的私钥。日志会打印「形状」指明是哪一类：带 CRLF / 挤成一行 / 漏了 BEGIN-END 行（这三种会自动修）、带口令 / `.ppk` / 粘贴截断（需重贴）。见 §2.8 |
+| Actions 部署报 `Permission denied (publickey,password)` | 公钥不在 `DEPLOY_USER`（默认 **root**，不是你平时登录的用户）的 `authorized_keys` 里，或权限不对、`PermitRootLogin no`。按 §2.8「鉴权失败怎么查」三步走 |
+| Actions 部署成功，但过一阵站点没有自动更新 | 这条路本来就不装 timer（§2.8）。更新 = 再点一次 Run workflow |
 | 双击 `启动仿真台.command` 弹「无法验证开发者」 | 只有从网页下载 zip 才会被 Gatekeeper 隔离，`git clone` 下来的不会。右键 →「打开」→「打开」放行一次即可，或 `xattr -d com.apple.quarantine 启动仿真台.command` |
 | 双击 `.command` 提示 `permission denied` | 执行位丢了（下载 zip 常见）：`chmod +x 启动仿真台.command` |
 | Windows 启动器报 `Python 3.8+ not found` | 装 Python 3 时没勾「Add python.exe to PATH」。重装勾上，或在仓库目录里用完整路径跑 `web\launch.py` |
