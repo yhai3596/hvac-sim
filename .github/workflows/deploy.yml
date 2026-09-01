@@ -132,6 +132,22 @@ jobs:
         run: |
           set -o pipefail
           U="${USER_NAME:-root}"; P="${PORT:-22}"
+          # 先探一次鉴权：失败时 scp 只会甩一句 Permission denied，看不出是公钥没被接受
+          # 还是服务器不允许这个用户用公钥登录，这里把协商过程摘出来
+          if ! ssh -i ~/.ssh/id_deploy -p "$P" -o BatchMode=yes -o ConnectTimeout=15 "$U@$HOST" true 2>/tmp/sshprobe; then
+            echo "::error::SSH 鉴权失败（以 $U 登录服务器:$P）：$(tr '\n' ' ' < /tmp/sshprobe)"
+            echo "  协商过程："
+            ssh -vv -i ~/.ssh/id_deploy -p "$P" -o BatchMode=yes -o ConnectTimeout=15 "$U@$HOST" true 2>&1 \
+              | grep -E "Offering public key|Authentications that can continue|Server accepts key|Next authentication method|Permission denied|banner" \
+              | sed 's/^/    /' || true
+            echo "  按这个顺序查："
+            echo "   1) 公钥要加在 $U 这个用户的 ~/.ssh/authorized_keys 里（DEPLOY_USER 没设时默认用 root）"
+            echo "   2) sshd_config 的 PermitRootLogin 若为 no，root 走公钥也会被拒；改成 prohibit-password 后 systemctl reload sshd"
+            echo "   3) 权限：家目录不可组写，~/.ssh 为 700，authorized_keys 为 600，属主是该用户"
+            echo "   4) authorized_keys 里那行必须是完整一行，粘贴时不能被折断"
+            exit 1
+          fi
+          echo "SSH 鉴权通过（$U@服务器:$P）"
           tar czf /tmp/payload.tgz --exclude=.git --exclude=dist .
           echo "源码包 $(du -h /tmp/payload.tgz | cut -f1)，推送到 $U@$HOST:$P"
           scp -i ~/.ssh/id_deploy -P "$P" -o BatchMode=yes /tmp/payload.tgz "$U@$HOST:/tmp/hvac-payload.tgz"
