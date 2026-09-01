@@ -183,6 +183,14 @@ configure_caddy() {
 
   cat > "$CADDY_SITE" <<CADDY
 # 由 deploy/install.sh 生成，重跑脚本会覆盖本文件。证书由 Caddy 自动申请与续期。
+
+# 显式认领本域名的 80 端口。Caddy 本来会自动加这条跳转，但主配置里若存在 :80
+# 这类兜底站点块，它会接管所有 Host 的 80 端口请求，自动跳转就不生效了——
+# 带 Host 的站点块比 :80 更具体，写出来才能稳定压过兜底块。
+http://$DOMAIN {
+    redir https://{host}{uri} permanent
+}
+
 $DOMAIN {
     root * $APP_DIR/dist
     encode gzip
