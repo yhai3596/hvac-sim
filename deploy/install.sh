@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 在服务器上一键部署空调控制算法仿真平台（静态站点 + 可选的大模型 API 反代）。
 #
-#   curl -fsSL https://raw.githubusercontent.com/yhai3596/hvac-sim/claude/ac-control-algorithm-simulation-zivkl0/deploy/install.sh -o install.sh
+#   curl -fsSL https://raw.githubusercontent.com/yhai3596/hvac-sim/main/deploy/install.sh -o install.sh
 #   sudo DOMAIN=hvac.geopro.top EMAIL=you@example.com bash install.sh
 #
 # 幂等：重复执行只做增量（已存在的仓库走 git pull，已签发的证书不重复申请）。
@@ -10,7 +10,7 @@
 #   EMAIL      Let's Encrypt 通知邮箱；留空则用 --register-unsafely-without-email
 #   SKIP_TLS=1 只配 HTTP，不申请证书（DNS 还没生效时先这样，之后再跑一遍即可补证书）
 #   APP_DIR    代码目录，默认 /opt/hvac-sim
-#   BRANCH     部署分支，默认 claude/ac-control-algorithm-simulation-zivkl0
+#   BRANCH     部署分支，默认 main
 #   AUTO_UPDATE=0  不安装每 30 分钟自动拉取更新的 systemd timer
 #   DRY_RUN=1  只打印将要执行的特权命令并把配置写到 NGINX_DIR/SYSTEMD_DIR（用于自测）
 set -euo pipefail
@@ -19,7 +19,7 @@ DOMAIN="${DOMAIN:-}"
 EMAIL="${EMAIL:-}"
 APP_DIR="${APP_DIR:-/opt/hvac-sim}"
 REPO="${REPO:-https://github.com/yhai3596/hvac-sim.git}"
-BRANCH="${BRANCH:-claude/ac-control-algorithm-simulation-zivkl0}"
+BRANCH="${BRANCH:-main}"
 ENV_FILE="${ENV_FILE:-/etc/hvac-sim/api.env}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 SKIP_TLS="${SKIP_TLS:-0}"
@@ -436,8 +436,11 @@ else
   fi
 fi
 
-if [ "$AUTO_UPDATE" = "1" ] && [ "$SOURCE_KIND" != "git" ]; then
-  info "代码不是通过 git 拉下来的（$SOURCE_KIND），服务器无法自行更新，跳过 timer"
+# 判据用「$APP_DIR 是不是 git 工作副本」，而不是本次源码怎么来的：走 GitHub Actions 部署时
+# 源码是 tar 推过来的（SOURCE_KIND=local），但目录里往往还留着上一次 git 部署的 .git 和
+# 一份指向旧分支的 timer——不重写它，半小时后它就会把站点 reset 回旧分支，抹掉这次部署。
+if [ "$AUTO_UPDATE" = "1" ] && [ ! -d "$APP_DIR/.git" ]; then
+  info "$APP_DIR 不是 git 工作副本（本次源码来自 $SOURCE_KIND），服务器无法自行更新，跳过 timer"
   info "后续更新用同样的方式重新推一次代码再跑本脚本，或走 GitHub Actions 部署"
 elif [ "$AUTO_UPDATE" = "1" ]; then
   cat > "$SYSTEMD_DIR/hvac-sim-update.service" <<UNIT
