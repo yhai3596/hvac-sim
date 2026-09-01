@@ -26,6 +26,7 @@
 | [`web/launch.py`](web/launch.py) | 双击启动器的实际逻辑：`git pull` 拉最新代码 → 构建 → 起服务（更新失败不阻断） |
 | `启动仿真台.command` / `.bat` | macOS / Windows 双击入口，日常使用不用敲命令 |
 | [`docs/deploy.md`](docs/deploy.md) | 本地使用与服务器部署指南（含 CORS/API Key 的两种处理方式） |
+| [`deploy/install.sh`](deploy/install.sh) | 服务器一键部署：装依赖 + 拉代码 + 构建 + nginx + HTTPS + 自动更新 timer（幂等，支持 `DRY_RUN=1`） |
 | [`eval/`](eval/) | 智能助手 LLM 解析路径评测：真实提示词 → 模型 → 校验 → 执行，七维打分 + 反向对照 |
 
 ## 快速开始

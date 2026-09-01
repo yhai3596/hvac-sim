@@ -313,6 +313,69 @@ rsync -a dist/ user@server:/var/www/ac-sim/     # 或你惯用的发布方式
 
 ---
 
+### 2.7 一键部署脚本（Linux 服务器 + 域名 + HTTPS）
+
+前面几节讲的是"怎么做"，`deploy/install.sh` 把它们串成了一条可重复执行的命令。适用于
+Debian/Ubuntu 与 CentOS/RHEL/TencentOS（自动识别 apt / dnf / yum）。
+
+**先决条件**
+
+1. 域名的 A 记录已指向服务器公网 IP（`getent hosts 你的域名` 能返回该 IP）；
+2. 云控制台安全组放行 **80 与 443**——脚本改不了安全组，这一步只能你在控制台点；
+3. 有 root 或 sudo。
+
+**执行**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yhai3596/-/claude/ac-control-algorithm-simulation-zivkl0/deploy/install.sh -o install.sh
+less install.sh                       # 建议先扫一眼再跑
+sudo DOMAIN=你的域名 EMAIL=你的邮箱 bash install.sh
+```
+
+脚本按顺序做六件事，每一步都幂等（重复跑只做增量）：
+
+| 步骤 | 内容 |
+| --- | --- |
+| 1 | 装 git / python3 / nginx / certbot |
+| 2 | 克隆或更新代码到 `/opt/hvac-sim`（已存在则 `git reset --hard` 到远端，服务器按只读部署对待） |
+| 3 | `python3 web/serve.py --build` 产出 `dist/index.html` |
+| 4 | 写 nginx 站点（`charset utf-8`、gzip、`index.html` 不缓存、ACME 目录），`nginx -t` 通过才 reload |
+| 5 | 若存在 `/etc/hvac-sim/api.env` 则装大模型 API 反代服务（只监听 127.0.0.1，公网只能经 nginx 的 `/api/` 走） |
+| 6 | certbot 申请证书并开启 80→443 跳转；装每 30 分钟拉取更新的 systemd timer |
+
+常用开关：`SKIP_TLS=1` 只配 HTTP（DNS 还没生效时先这样，解析好后重跑补证书）、
+`AUTO_UPDATE=0` 不装自动更新、`APP_DIR=` 换目录、`BRANCH=` 换分支、
+`DRY_RUN=1` 只打印将执行的特权命令（用来先看一遍它到底要干什么）。
+
+**开启大模型 API 反代**（可选，团队共用时推荐——Key 只留服务端，且没有 CORS 问题）
+
+```bash
+sudo mkdir -p /etc/hvac-sim
+sudo cp /opt/hvac-sim/deploy/api.env.example /etc/hvac-sim/api.env
+sudo chmod 600 /etc/hvac-sim/api.env
+sudo nano /etc/hvac-sim/api.env        # 填真实 Key
+sudo DOMAIN=你的域名 bash /opt/hvac-sim/deploy/install.sh    # 重跑，这次会带上 /api/
+```
+
+页面「API 配置」里 Base URL 填 `/api/deepseek`（或你在 env 里起的名字），Key 栏填 `proxy`
+之类的占位符即可。
+
+**日常运维**
+
+```bash
+systemctl list-timers hvac-sim-update.timer     # 看下次自动更新时间
+systemctl start hvac-sim-update.service         # 立刻拉一次更新
+journalctl -u hvac-sim-proxy -n 50              # 看反代日志
+nginx -t && systemctl reload nginx              # 改完配置自查再生效
+```
+
+**已知边界**：脚本本身在容器里以 `DRY_RUN` 跑通了全流程（含真实克隆与构建、配置文件生成），
+但开发环境装不了 nginx / certbot / systemd，**这三者的实际行为未在本项目实测**。脚本在
+reload 前会先 `nginx -t`，配置有错会当场停住而不是把站点搞挂；证书申请失败也只影响 HTTPS，
+HTTP 站点仍然可用。
+
+---
+
 ## 三、常见问题
 
 | 现象 | 原因与处理 |
@@ -323,6 +386,10 @@ rsync -a dist/ user@server:/var/www/ac-sim/     # 或你惯用的发布方式
 | 批量实验时页面像卡住 | 正常：跑实验期间主循环会暂停，进度条与剩余时间在助手卡片里；可点「停止实验」 |
 | 换了台机器，方案记录没了 | localStorage 按浏览器+站点隔离，不会跟着账号走。用「复制 CSV」导出保存 |
 | 生成报告超时 | 反代默认 300s；若用 nginx 记得把 `proxy_read_timeout` 调大，默认 60s 不够 |
+| 部署后打不开，浏览器一直转圈 | 九成是云控制台安全组没放行 80/443。先在服务器上 `curl -I http://127.0.0.1/` 确认 nginx 本机正常 |
+| 部署后 `/api/` 返回 502 | 反代服务没起来：`systemctl status hvac-sim-proxy`、`journalctl -u hvac-sim-proxy -n 50` |
+| certbot 申请证书失败 | 多半是 80 端口没放行或 DNS 未生效。站点仍可用 HTTP 访问，解析好后重跑脚本即可 |
+| 服务器上改了文件，自动更新把改动冲掉了 | 设计如此：`hvac-sim-update.service` 用 `git reset --hard` 与远端对齐。要在服务器改就先 `systemctl disable --now hvac-sim-update.timer` |
 | 双击 `启动仿真台.command` 弹「无法验证开发者」 | 只有从网页下载 zip 才会被 Gatekeeper 隔离，`git clone` 下来的不会。右键 →「打开」→「打开」放行一次即可，或 `xattr -d com.apple.quarantine 启动仿真台.command` |
 | 双击 `.command` 提示 `permission denied` | 执行位丢了（下载 zip 常见）：`chmod +x 启动仿真台.command` |
 | Windows 启动器报 `Python 3.8+ not found` | 装 Python 3 时没勾「Add python.exe to PATH」。重装勾上，或在仓库目录里用完整路径跑 `web\launch.py` |
