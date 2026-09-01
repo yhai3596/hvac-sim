@@ -162,8 +162,7 @@ server {
     index index.html;
     charset utf-8;                     # 不能省，否则中文可能乱码
 
-    gzip on;
-    gzip_types text/html;
+    gzip on;                           # text/html 无条件参与 gzip，不必再列进 gzip_types
     gzip_min_length 1024;              # 160 KB 的页面可压到约 30 KB
 
     location = /index.html {
@@ -188,8 +187,32 @@ if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce 2>/dev/null || echo 
 fi
 
 run nginx -t
-run systemctl enable --now nginx
-run systemctl reload nginx
+
+nginx_fail() {
+  echo
+  info "nginx 启动失败。它自己的说法："
+  systemctl status nginx --no-pager -l 2>&1 | tail -15 | sed 's/^/    /' || true
+  echo
+  journalctl -xeu nginx --no-pager 2>&1 | tail -12 | sed 's/^/    /' || true
+  if command -v ss >/dev/null 2>&1; then
+    busy=$(ss -lntp 2>/dev/null | awk '$4 ~ /:(80|443)$/' || true)
+    if [ -n "$busy" ]; then
+      echo
+      info "80/443 端口的占用情况（最常见的原因就是被别的服务占了）："
+      printf '    %s\n' "$busy"
+    fi
+  fi
+  die "解决上面的问题后重跑本脚本即可——配置已经写好，重跑不会重复劳动"
+}
+
+# restart 而不是 enable --now + reload：停着就起、跑着就重载新配置，一步到位且幂等
+if [ "$DRY_RUN" = "1" ]; then
+  run systemctl enable nginx
+  run systemctl restart nginx
+else
+  systemctl enable nginx >/dev/null 2>&1 || true
+  systemctl restart nginx || nginx_fail
+fi
 
 # ---------- 5. 可选：大模型 API 反代 ----------
 say "5/6 大模型 API 反代"
