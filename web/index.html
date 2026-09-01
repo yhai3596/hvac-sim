@@ -39,6 +39,23 @@ header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;
   padding:10px 20px;border-bottom:1px solid var(--ring);background:var(--surface)}
 header h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.02em}
 header .sub{color:var(--muted);font-size:12px}
+.verbtn{display:inline-flex;align-items:center;gap:5px;margin-left:10px;vertical-align:2px;
+  border:1px solid var(--ring);background:var(--chip);color:var(--ink2);
+  border-radius:999px;padding:1px 9px;font-size:12px;font-weight:500;line-height:1.6;cursor:pointer}
+.verbtn:hover{background:var(--surface)}
+.verbtn .caret{font-size:9px;color:var(--muted);transition:transform .15s}
+.verbtn[aria-expanded="true"] .caret{transform:rotate(180deg)}
+#changelog{border-bottom:1px solid var(--ring);background:var(--surface);padding:2px 20px 14px}
+#changelog[hidden]{display:none}
+#changelog h2{font-size:13px;font-weight:650;margin:0 0 8px}
+.cl-list{list-style:none;margin:0;padding:0;display:grid;gap:10px;max-width:900px}
+.cl-ver{display:flex;align-items:baseline;gap:8px;font-size:12px;flex-wrap:wrap}
+.cl-ver b{font-size:13px;font-weight:650}
+.cl-ver .date{color:var(--muted);font-variant-numeric:tabular-nums}
+.cl-ver .now{border:1px solid var(--ring);background:var(--chip);color:var(--ink2);
+  border-radius:999px;padding:0 7px;font-size:11px}
+.cl-list ul{margin:3px 0 0;padding-left:18px;color:var(--ink2);font-size:12.5px}
+.cl-list li{margin:1px 0}
 .spacer{flex:1}
 .transport{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .transport .clock{font-variant-numeric:tabular-nums;color:var(--ink2);min-width:8.5em;text-align:right}
@@ -157,7 +174,7 @@ table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
   /* 强制浅色，避免深色主题打印出满页黑底 */
   :root,:root[data-theme="dark"]{--ink:#000;--ink2:#333;--muted:#666;--grid:#ccc;--surface:#fff;--plane:#fff}
   body{background:#fff!important;color:#000!important;font-size:10.5pt}
-  .app,header,.tooltip{display:none!important}
+  .app,header,#changelog,.tooltip{display:none!important}
   #printRoot{display:block!important;padding:0;max-width:none}
   @page{size:A4;margin:16mm 14mm}
   #printRoot h1{font-size:19pt;margin:0 0 2mm}
@@ -186,7 +203,9 @@ table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
 
 <header>
   <div>
-    <h1>变频空调控制仿真台</h1>
+    <h1>变频空调控制仿真台<button class="verbtn" id="verBtn" aria-expanded="false"
+      aria-controls="changelog" title="查看工作台更新记录"><span id="verLabel"></span><span
+      class="caret" aria-hidden="true">▼</span></button></h1>
     <div class="sub">ASHRAE 气候 · 2R2C+湿平衡 · 变频热泵（压缩机/风量/化霜/辅热） · V1.44 负荷预测 + Tes/Tcs 自学习</div>
   </div>
   <div style="display:flex;gap:6px;align-items:center">
@@ -213,6 +232,12 @@ table.defs td:first-child{white-space:nowrap;color:var(--ink);font-weight:600}
     <button class="btn" id="resetBtn">重置全部</button>
   </div>
 </header>
+
+<section id="changelog" hidden aria-label="工作台更新记录">
+  <h2>工作台更新记录</h2>
+  <ol class="cl-list" id="clList"></ol>
+  <p class="hint" style="margin:10px 0 0">标题栏里的「V1.44」指被仿真的<b>控制算法</b>版本，与此处的<b>工作台</b>版本各自独立。</p>
+</section>
 
 <div class="app">
 <aside>
@@ -2947,7 +2972,68 @@ function frame(now){
   if(now-lastUi>120){lastUi=now;refreshAll();}
   requestAnimationFrame(frame);
 }
+/* ================= 版本与更新记录 ================= */
+// 版本号沿用仓库既有的工作台序列（v1 → v6.1b）。这里是唯一出处：
+// 顶部徽标与更新记录面板都从 CHANGELOG[0] 取，改版本只改这一处。
+const CHANGELOG=[
+  {v:"v6.2",   d:"2026-09-01", items:[
+    "修复 Windows/Chrome 等非整数 DPR（125%/150% 显示缩放）下图表横轴刻度消失、曲线越过下边界",
+    "顶部新增版本号与本更新记录面板",
+    "站点部署改跟 main 分支，更新走 GitHub Actions 一键部署",
+  ]},
+  {v:"v6.1b",  d:"2026-08-30", items:[
+    "按对抗审计结果重写智能助手的解析规则，修复解析层的静默缺陷",
+    "把 LLM 确立为解析主路径，并为它建立评测",
+    "分析报告支持导出 PDF / Markdown / HTML",
+    "新增双击启动器（macOS .command / Windows .bat），启动即自动拉取更新",
+  ]},
+  {v:"v6.1",   d:"2026-08-30", items:[
+    "智能助手解析器重做：多维分组 + 先评估后执行",
+    "预学习语义修正",
+  ]},
+  {v:"v6",     d:"2026-08-30", items:[
+    "智能实验助手：用自然语言设置测试条件，批量仿真并生成对比报告",
+  ]},
+  {v:"v5",     d:"2026-08-30", items:[
+    "湿源拆成三路独立变量：产湿 kg/h、渗透 ACH、机械新风 m³/h",
+    "满足度缩放修正：只缩放显热源，湿源不参与",
+  ]},
+  {v:"v4",     d:"2026-08-29", items:[
+    "方案对比指标说明",
+    "LLM 分析报告（多 API 配置与轮询）",
+  ]},
+  {v:"v3",     d:"2026-08-29", items:[
+    "负荷满足度、3/5 Ton 能力段、内机风量三模式",
+  ]},
+  {v:"v2",     d:"2026-08-29", items:[
+    "气候地点、湿度与除湿、压缩机动态、制热化霜",
+    "基准对比工作流",
+  ]},
+  {v:"v1",     d:"2026-08-29", items:[
+    "V1.44 算法解读与优缺点分析、仿真核心与可视化",
+  ]},
+];
+const APP_VERSION=CHANGELOG[0].v;
+function renderChangelog(){
+  document.getElementById("verLabel").textContent="工作台 "+APP_VERSION;
+  document.getElementById("clList").innerHTML=CHANGELOG.map((r,i)=>
+    '<li><div class="cl-ver"><b>'+esc(r.v)+'</b><span class="date">'+esc(r.d)+'</span>'+
+    (i===0?'<span class="now">当前版本</span>':'')+'</div><ul>'+
+    r.items.map(t=>'<li>'+esc(t)+'</li>').join("")+'</ul></li>').join("");
+}
+(function bindChangelog(){
+  const btn=document.getElementById("verBtn"),panel=document.getElementById("changelog");
+  btn.addEventListener("click",()=>{
+    const open=btn.getAttribute("aria-expanded")==="true";
+    btn.setAttribute("aria-expanded",String(!open));
+    panel.hidden=open;                  // 默认收起，点一下展开，再点收起
+    // 展开/收起可能让滚动条出现或消失，进而改变画布宽度，等布局落定后重画一次
+    requestAnimationFrame(renderCharts);
+  });
+})();
+
 // 初始化
+renderChangelog();
 document.getElementById("locSel").innerHTML=Object.entries(LOCATIONS)
   .map(([k,v])=>'<option value="'+k+'">'+v.name+'</option>').join("");
 applyLocation(false);
