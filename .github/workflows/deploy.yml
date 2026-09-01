@@ -62,6 +62,7 @@ jobs:
           echo "已记录主机指纹："
           ssh-keygen -lf ~/.ssh/known_hosts | sed 's/^/  /'
 
+      # 把源码打包推过去，而不是让服务器自己 git clone——国内服务器往往连不上 github.com
       - name: 执行部署
         id: deploy
         env:
@@ -75,10 +76,18 @@ jobs:
           BRANCH: ${{ github.ref_name }}
         run: |
           set -o pipefail
-          ssh -i ~/.ssh/id_deploy -p "${PORT:-22}" -o BatchMode=yes \
-              "${USER_NAME:-root}@$HOST" \
-              "sudo env DOMAIN='$DOMAIN' EMAIL='$EMAIL' SKIP_TLS='$SKIP_TLS' AUTO_UPDATE='$AUTO_UPDATE' BRANCH='$BRANCH' bash -s" \
-              < deploy/install.sh
+          U="${USER_NAME:-root}"; P="${PORT:-22}"
+          tar czf /tmp/payload.tgz --exclude=.git --exclude=dist .
+          echo "源码包 $(du -h /tmp/payload.tgz | cut -f1)，推送到 $U@$HOST:$P"
+          scp -i ~/.ssh/id_deploy -P "$P" -o BatchMode=yes /tmp/payload.tgz "$U@$HOST:/tmp/hvac-payload.tgz"
+          ssh -i ~/.ssh/id_deploy -p "$P" -o BatchMode=yes "$U@$HOST" bash -s <<REMOTE
+          set -e
+          rm -rf /tmp/hvac-src && mkdir -p /tmp/hvac-src
+          tar xzf /tmp/hvac-payload.tgz -C /tmp/hvac-src
+          rm -f /tmp/hvac-payload.tgz
+          sudo env DOMAIN='$DOMAIN' EMAIL='$EMAIL' SKIP_TLS='$SKIP_TLS' AUTO_UPDATE='$AUTO_UPDATE' \
+               BRANCH='$BRANCH' SRC_DIR=/tmp/hvac-src bash /tmp/hvac-src/deploy/install.sh
+          REMOTE
 
       # 部署真的跑过才验收：否则（比如缺 secret 提前退出）会刷出一堆无意义的告警
       - name: 验收（从 runner 实际访问站点）

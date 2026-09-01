@@ -56,17 +56,69 @@ fi
 info "包管理器：$PKG"
 
 # ---------- 2. 取代码 ----------
+# 三条取码路径，按可靠性从高到低尝试。国内服务器常常连不上 github.com（表现为
+# GnuTLS recv error / Connection reset），所以 git 不是必需条件。
 say "2/6 获取代码到 $APP_DIR（分支 $BRANCH）"
-if [ -d "$APP_DIR/.git" ]; then
-  git -C "$APP_DIR" fetch --quiet origin "$BRANCH"
-  git -C "$APP_DIR" checkout --quiet "$BRANCH"
-  git -C "$APP_DIR" reset --hard --quiet "origin/$BRANCH"      # 服务器只读部署，以远端为准
-  info "已更新到 $(git -C "$APP_DIR" rev-parse --short HEAD)"
+SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")
+SRC_DIR="${SRC_DIR:-}"
+# 脚本自己就躺在一份完整源码里时（scp 过来的、CI 推过来的），直接用它，不碰网络
+if [ -z "$SRC_DIR" ] && [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/../web/serve.py" ]; then
+  SRC_DIR=$(cd "$SELF_DIR/.." && pwd)
+fi
+SLUG=$(printf '%s' "$REPO" | sed -e 's#^https\?://[^/]*/##' -e 's#\.git$##')
+TARBALL_URL="${TARBALL_URL:-https://codeload.github.com/$SLUG/tar.gz/refs/heads/$BRANCH}"
+SOURCE_KIND=""
+
+git_try() {   # git 走 HTTP/1.1 + 大 postBuffer，能绕开一部分中间设备的干扰
+  git -c http.version=HTTP/1.1 -c http.postBuffer=524288000 "$@" 2>&1
+}
+
+if [ -n "$SRC_DIR" ]; then
+  info "使用本地源码：$SRC_DIR（离线模式，不访问网络）"
+  mkdir -p "$APP_DIR"
+  (cd "$SRC_DIR" && tar cf - --exclude=.git --exclude=dist .) | (cd "$APP_DIR" && tar xf -)
+  SOURCE_KIND=local
+elif [ -d "$APP_DIR/.git" ]; then
+  if git_try -C "$APP_DIR" fetch --quiet origin "$BRANCH" >/dev/null; then
+    git -C "$APP_DIR" checkout --quiet "$BRANCH"
+    git -C "$APP_DIR" reset --hard --quiet "origin/$BRANCH"    # 服务器只读部署，以远端为准
+    info "已更新到 $(git -C "$APP_DIR" rev-parse --short HEAD)"
+    SOURCE_KIND=git
+  else
+    info "拉取失败（服务器可能连不上 GitHub），沿用已有代码继续部署"
+    SOURCE_KIND=stale
+  fi
 else
   mkdir -p "$(dirname "$APP_DIR")"
-  git clone --quiet --branch "$BRANCH" "$REPO" "$APP_DIR"
-  info "已克隆到 $(git -C "$APP_DIR" rev-parse --short HEAD)"
+  if out=$(git_try clone --quiet --branch "$BRANCH" "$REPO" "$APP_DIR"); then
+    info "已克隆到 $(git -C "$APP_DIR" rev-parse --short HEAD)"
+    SOURCE_KIND=git
+  else
+    info "git clone 失败：$(printf '%s' "$out" | tail -1)"
+    info "改用 HTTPS 下载源码包：$TARBALL_URL"
+    rm -rf "$APP_DIR"
+    mkdir -p "$APP_DIR"
+    if curl -fsSL --retry 3 --retry-delay 2 -m 180 "$TARBALL_URL" -o /tmp/hvac-src.tgz \
+       && tar xzf /tmp/hvac-src.tgz -C "$APP_DIR" --strip-components=1; then
+      rm -f /tmp/hvac-src.tgz
+      info "源码包解包完成（无 git 元数据，自动更新将不可用）"
+      SOURCE_KIND=tarball
+    else
+      rm -f /tmp/hvac-src.tgz
+      die "服务器既连不上 github.com 也下不到源码包。可行做法：
+  1) 在能访问 GitHub 的机器上克隆后打包传过来：
+       git clone https://github.com/yhai3596/-.git hvac-sim
+       tar czf hvac.tgz -C hvac-sim .
+       scp hvac.tgz 用户名@服务器IP:/tmp/
+     然后在服务器上：
+       mkdir -p /tmp/hvac-src && tar xzf /tmp/hvac.tgz -C /tmp/hvac-src
+       sudo DOMAIN=$DOMAIN SRC_DIR=/tmp/hvac-src bash /tmp/hvac-src/deploy/install.sh
+  2) 或者用 GitHub Actions 部署（.github/workflows/deploy.yml），由 runner 把代码推给服务器
+  3) 或者指定一个能访问的镜像：REPO=https://你的镜像/xxx.git 重跑本脚本"
+    fi
+  fi
 fi
+[ -f "$APP_DIR/web/serve.py" ] || die "取到的代码不完整：$APP_DIR/web/serve.py 不存在"
 chmod 755 "$APP_DIR"
 
 # ---------- 3. 构建 ----------
@@ -185,7 +237,10 @@ else
   fi
 fi
 
-if [ "$AUTO_UPDATE" = "1" ]; then
+if [ "$AUTO_UPDATE" = "1" ] && [ "$SOURCE_KIND" != "git" ]; then
+  info "代码不是通过 git 拉下来的（$SOURCE_KIND），服务器无法自行更新，跳过 timer"
+  info "后续更新用同样的方式重新推一次代码再跑本脚本，或走 GitHub Actions 部署"
+elif [ "$AUTO_UPDATE" = "1" ]; then
   cat > "$SYSTEMD_DIR/hvac-sim-update.service" <<UNIT
 [Unit]
 Description=拉取 HVAC 仿真台最新代码并重新构建

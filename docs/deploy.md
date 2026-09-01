@@ -345,7 +345,27 @@ sudo DOMAIN=你的域名 EMAIL=你的邮箱 bash install.sh
 
 常用开关：`SKIP_TLS=1` 只配 HTTP（DNS 还没生效时先这样，解析好后重跑补证书）、
 `AUTO_UPDATE=0` 不装自动更新、`APP_DIR=` 换目录、`BRANCH=` 换分支、
-`DRY_RUN=1` 只打印将执行的特权命令（用来先看一遍它到底要干什么）。
+`SRC_DIR=` 用本地已有源码（离线部署）、`DRY_RUN=1` 只打印将执行的特权命令。
+
+> **服务器连不上 GitHub 怎么办**（国内机器常见，表现为 `GnuTLS recv error (-110)`、
+> `Connection reset by peer`）：脚本的取码步骤有三条路径，按顺序自动降级——
+> ① `SRC_DIR` 指定的本地源码（完全不联网）→ ② `git clone`（走 HTTP/1.1、加大 postBuffer）
+> → ③ `codeload.github.com` 的源码包。三条都不通时会打印出具体的替代做法再退出，
+> 而不是留下半个装了一半的系统。走 ② 之外的路径时服务器没有 git 元数据，
+> 自动更新 timer 会自动跳过（脚本会明确告诉你），后续更新用同样方式重新推一次代码即可。
+>
+> 最省事的离线部署：在能访问 GitHub 的机器上打包传过去。
+>
+> ```bash
+> # 本地（能上 GitHub 的机器）
+> git clone https://github.com/yhai3596/-.git hvac-sim
+> tar czf hvac.tgz -C hvac-sim .
+> scp hvac.tgz 用户名@服务器IP:/tmp/
+>
+> # 服务器上
+> mkdir -p /tmp/hvac-src && tar xzf /tmp/hvac.tgz -C /tmp/hvac-src
+> sudo DOMAIN=你的域名 EMAIL=你的邮箱 SRC_DIR=/tmp/hvac-src bash /tmp/hvac-src/deploy/install.sh
+> ```
 
 **开启大模型 API 反代**（可选，团队共用时推荐——Key 只留服务端，且没有 CORS 问题）
 
@@ -378,9 +398,12 @@ HTTP 站点仍然可用。
 
 ### 2.8 用 GitHub Actions 部署（不想自己 ssh 上服务器时）
 
-`.github/workflows/deploy.yml` 把 §2.7 的脚本挪到 Actions runner 上执行：runner ssh 进服务器，
-把**本次 checkout 的** `deploy/install.sh` 通过 stdin 喂给它跑，跑完再从 runner 实际访问站点做验收。
-好处是部署过程有完整日志、脚本版本不会漂移，也不必在本地准备任何东西。
+`.github/workflows/deploy.yml` 把 §2.7 的脚本挪到 Actions runner 上执行：runner 把**本次 checkout
+的源码**打包 scp 到服务器，再 ssh 进去以 `SRC_DIR=` 离线模式执行 `install.sh`，跑完从 runner 实际
+访问站点做验收。
+
+这条路对**服务器连不上 GitHub** 的情况尤其合适：代码是 runner 推过去的，服务器全程不需要访问
+github.com。部署过程有完整日志，脚本版本也不会漂移。
 
 先在仓库 **Settings → Secrets and variables → Actions** 加三个 secret：
 
