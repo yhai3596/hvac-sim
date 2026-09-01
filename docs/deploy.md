@@ -129,7 +129,7 @@ print(r.summary())
 
 | 环节 | 会不会自动 | 说明 |
 | --- | --- | --- |
-| GitHub 上的代码 | **自动** | 每轮迭代结束都会推到 `claude/ac-control-algorithm-simulation-zivkl0`，而它就是本仓库的默认分支——`git clone` 默认检出它、`git pull` 默认也跟它，所以远端总是最新的 |
+| GitHub 上的代码 | **自动** | 每轮迭代都会合进默认分支 `main`——`git clone` 默认检出它、`git pull` 默认也跟它，所以远端总是最新的 |
 | 本地克隆 | **不自动** | git 不会自己拉代码。你的本地副本停在上次 `git pull` 的那一刻，直到你（或启动器）去拉 |
 | 浏览器里看到的页面 | 拉完即最新 | `serve.py` 对页面发 `Cache-Control: no-store`，刷新一下就是新版本，不用清缓存 |
 
@@ -145,7 +145,7 @@ git pull && python3 web/serve.py           # 手动版
 启动器会把这次拉到的提交打印出来，一眼看到更新了什么：
 
 ```
-· 检查更新（origin/claude/ac-control-algorithm-simulation-zivkl0）…
+· 检查更新（origin/main）…
 · 已更新到最新版本，本次带来：
     247a417 报告下载接入 Artifact 的 downloads 能力
     7302d68 分析报告支持导出 PDF / Markdown / HTML
@@ -344,7 +344,7 @@ Debian/Ubuntu 与 CentOS/RHEL/TencentOS（自动识别 apt / dnf / yum）。
 **执行**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yhai3596/hvac-sim/claude/ac-control-algorithm-simulation-zivkl0/deploy/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/yhai3596/hvac-sim/main/deploy/install.sh -o install.sh
 less install.sh                       # 建议先扫一眼再跑
 sudo DOMAIN=你的域名 EMAIL=你的邮箱 bash install.sh
 ```

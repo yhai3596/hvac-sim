@@ -949,11 +949,21 @@ const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim
 let winLen=86400;
 function setupCanvas(cv){
   const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
-  if(cv.width!==Math.round(r.width*dpr)){cv.width=Math.round(r.width*dpr);
-    cv.height=Math.round(parseInt(cv.getAttribute("height"))*dpr);}
+  // 逻辑高度只认首次读到的 height 属性：给 canvas 设位图尺寸会改写 height 属性，
+  // 之后再读就成了「已乘过 DPR」的值，非整数 DPR（Windows 125%/150% 缩放）下
+  // 会把绘图坐标撑出画布，表现为横轴消失、曲线越过下边界。
+  let hCss=+cv.dataset.hcss;
+  if(!(hCss>0)){
+    hCss=parseInt(cv.getAttribute("height"),10)||150;
+    cv.dataset.hcss=hCss;
+    cv.style.height=hCss+"px";   // 用 CSS 锁定显示高度，不再依赖属性/宽高比
+  }
+  const w=r.width||cv.clientWidth;
+  const bw=Math.round(w*dpr),bh=Math.round(hCss*dpr);
+  if(cv.width!==bw||cv.height!==bh){cv.width=bw;cv.height=bh;}
   const ctx=cv.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  return {ctx,w:r.width,h:parseInt(cv.getAttribute("height"))};
+  return {ctx,w,h:hCss};
 }
 function niceTicks(lo,hi,n){
   const span=hi-lo||1,step0=span/n,mag=Math.pow(10,Math.floor(Math.log10(step0)));
@@ -2948,4 +2958,12 @@ renderRecords();
 reportReady();
 requestAnimationFrame(frame);
 window.addEventListener("resize",renderCharts);
+// 窗口在不同缩放比的显示器之间移动 / 浏览器缩放时 DPR 会变，重画一次避免位图与显示尺寸错配
+(function watchDpr(){
+  if(!window.matchMedia)return;
+  const mq=window.matchMedia("(resolution: "+(window.devicePixelRatio||1)+"dppx)");
+  const on=()=>{renderCharts();watchDpr();};
+  if(mq.addEventListener)mq.addEventListener("change",on,{once:true});
+  else if(mq.addListener)mq.addListener(on);
+})();
 </script>
