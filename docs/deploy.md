@@ -118,6 +118,8 @@ print(r.summary())
 隔离。三个后果需要知道：
 
 - 换浏览器、换机器、清缓存 → 记录会丢。要留存请用方案对比区的「复制 CSV」导出。
+- **API 配置是例外**：服务器上配好 `api.env` 后，页面会自动带上站点级配置（见 §2.3），
+  换电脑换浏览器都不必重填。
 - 用 `file://` 打开和用 `http://localhost` 打开是**两个不同的存储空间**，记录不互通。
 - 部署到服务器后，每个人看到的是自己浏览器里的记录，互不干扰（不是共享数据库）。
 
@@ -227,7 +229,24 @@ export AC_API_CLAUDE_PROTOCOL=anthropic     # 不填默认按 OpenAI 协议注�
 python3 web/serve.py --host 0.0.0.0 --port 8000 --proxy
 ```
 
-然后在页面「API 配置」里：
+**站点级配置：配一次，所有人所有浏览器都生效。** 配好 `api.env` 后重跑 `install.sh`（或
+`serve.py --build`），构建时会生成 `dist/config.json`：
+
+```json
+{ "apis": [ { "name":"DeepSeek", "protocol":"openai",
+              "base":"/api/deepseek", "model":"deepseek-chat", "key":"proxy" } ] }
+```
+
+页面加载时会拉这个文件并把里面没有的条目补进本地配置。于是任何人在任何电脑、任何浏览器
+打开站点，API 配置已经填好、直接能用。几条设计上的保证：
+
+- **真实 Key 不在里面**。`config.json` 只有同源的 `/api/<名字>` 与占位 Key `proxy`，
+  真实 Key 只存在于服务器的 `api.env` 与反代进程里，浏览器永远拿不到。
+- **不覆盖你已有的配置**。按"名字 + 地址"去重；你自己加的条目、你改过的值都不动。
+- **取不到就当没有**。Artifact 预览与 `file://` 打开都取不到这个文件，静默跳过，不报错。
+- 用 `AC_API_<名字>_MODEL` 与 `_LABEL` 指定下发的模型名与显示名。
+
+要手工填（或本地无反代）时，在页面「API 配置」里：
 
 | 字段 | 填什么 |
 | --- | --- |

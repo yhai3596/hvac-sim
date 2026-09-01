@@ -1362,6 +1362,21 @@ try{llmCfgs=JSON.parse(localStorage.getItem("acLlmCfgs")||"[]");
     llmPtr=+localStorage.getItem("acLlmPtr")||0;}catch(e){}
 function saveLlm(){try{localStorage.setItem("acLlmCfgs",JSON.stringify(llmCfgs));
   localStorage.setItem("acLlmPtr",String(llmPtr));}catch(e){}}
+// 站点级 API 配置：在服务器上配一次，任何电脑、任何浏览器打开都自动带上，不必逐台再填。
+// 下发的是同源的 /api/<名字> 与占位 Key——真实 Key 只在服务端反代里，浏览器永远拿不到。
+// 取不到就静默跳过（Artifact 预览与 file:// 打开都取不到，属正常），已有的本地配置不动。
+fetch("config.json",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(j=>{
+  if(!j||!Array.isArray(j.apis))return;
+  let added=0;
+  for(const a of j.apis){
+    if(!a||!a.base)continue;
+    if(llmCfgs.some(c=>c.name===a.name&&c.base===a.base))continue;   // 按 名字+地址 去重
+    llmCfgs.push({name:a.name||"站点配置",protocol:a.protocol==="anthropic"?"anthropic":"openai",
+                  base:a.base,model:a.model||"",key:a.key||"proxy",on:true,site:true});
+    added++;
+  }
+  if(added){saveLlm();try{renderCfgs();}catch(e){}}
+}).catch(()=>{});
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function renderCfgs(){
   document.getElementById("cfgRows").innerHTML=llmCfgs.map((c,i)=>

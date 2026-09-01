@@ -74,3 +74,21 @@ node eval/run_eval.js --corpus corpus-bad.json --responses eval/responses-bad.js
 `corpus.json` 的 24 条全部来自真实工程师口语，其中多数是两轮多 agent 对抗审计中
 **曾经把解析器打挂**的句子。`expect` 断言的是"编译结果"而不是实现细节，因此同一套语料
 可以用来横向比较不同模型。
+
+
+## 打真实模型（把自评换成真数字）
+
+仓库里带的 `responses.json` 是离线语料，由会话内模型产出、期望由同一方写就，只证明
+**契约可表达、评测链路可执行**，不构成对任何真实模型能力的评价。要拿到有意义的分数，
+用真实接口跑一遍：
+
+```bash
+# 直连厂商接口
+node eval/run_eval.js --base https://api.deepseek.com --key sk-xxx --execute
+
+# 或者在部署好反代的服务器上，打本机反代（Key 不出现在命令行里）
+node eval/run_eval.js --base http://127.0.0.1:8010/api/deepseek --key proxy --execute
+```
+
+`--execute` 会把解析出的计划真正拿去跑一遍，验证它不只是格式正确、而且能执行。
+建议至少覆盖两个不同厂商的模型，并把结果连同模型名与日期记进 `docs/validation-report.md`。

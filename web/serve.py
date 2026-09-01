@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import http.server
+import json
 import os
 import socketserver
 import urllib.error
@@ -72,6 +73,34 @@ def build() -> Path:
     out.write_text(HEAD + body + FOOT, encoding="utf-8")
     kb = out.stat().st_size / 1024
     print(f"已构建 {out}（{kb:.0f} KB，单文件、无外部依赖）")
+    build_site_config()
+    return out
+
+
+def build_site_config():
+    """按 AC_API_* 生成 dist/config.json：站点级 API 配置，任何浏览器打开都自动带上。
+
+    只写入 /api/<名字> 这样的同源路径与占位 Key——**真实 Key 永远不进这个文件**，
+    它留在服务端反代里。没有声明后端时删除旧文件，避免下发过期配置。
+    """
+    out = DIST / "config.json"
+    backends = load_backends()
+    if not backends:
+        if out.exists():
+            out.unlink()
+        return None
+    apis = []
+    for name in sorted(backends):
+        up = name.upper()
+        apis.append({
+            "name": os.environ.get(f"AC_API_{up}_LABEL", name),
+            "protocol": backends[name]["protocol"],
+            "base": f"/api/{name}",
+            "model": os.environ.get(f"AC_API_{up}_MODEL", ""),
+            "key": "proxy",          # 占位符：页面要求非空，实际由反代注入真实 Key
+        })
+    out.write_text(json.dumps({"apis": apis}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"已生成 {out}（{len(apis)} 个站点级 API 配置，不含任何真实 Key）")
     return out
 
 

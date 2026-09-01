@@ -148,6 +148,12 @@ chmod 755 "$APP_DIR"
 
 # ---------- 3. 构建 ----------
 say "3/6 构建 dist/index.html"
+# 载入 api.env 后再构建：serve.py 会据此生成 dist/config.json（站点级 API 配置，
+# 只含 /api/<名字> 与占位 Key，真实 Key 不进这个文件），任何浏览器打开站点都自动带上
+if [ -f "$ENV_FILE" ]; then
+  set -a; . "$ENV_FILE"; set +a
+  info "已读取 $ENV_FILE，将一并生成站点级 API 配置"
+fi
 python3 "$APP_DIR/web/serve.py" --build
 chmod 755 "$APP_DIR/dist"; chmod 644 "$APP_DIR/dist/index.html"
 
@@ -194,7 +200,8 @@ http://$DOMAIN {
 $DOMAIN {
     root * $APP_DIR/dist
     encode gzip
-    header /index.html Cache-Control "no-store"   # 更新后刷新即生效
+    header /index.html Cache-Control "no-store"    # 更新后刷新即生效
+    header /config.json Cache-Control "no-store"
 $CADDY_API
     handle {
         try_files {path} /index.html
@@ -329,7 +336,7 @@ server {
     gzip on;                           # text/html 无条件参与 gzip，不必再列进 gzip_types
     gzip_min_length 1024;              # 160 KB 的页面可压到约 30 KB
 
-    location = /index.html {
+    location ~ ^/(index\.html|config\.json)$ {
         add_header Cache-Control "no-store";   # 更新后刷新即生效
     }
 
@@ -440,6 +447,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+EnvironmentFile=-$ENV_FILE
 ExecStart=/usr/bin/git -C $APP_DIR fetch --quiet origin $BRANCH
 ExecStart=/usr/bin/git -C $APP_DIR reset --hard --quiet origin/$BRANCH
 ExecStart=/usr/bin/python3 $APP_DIR/web/serve.py --build

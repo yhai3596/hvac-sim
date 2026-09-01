@@ -31,6 +31,7 @@
 | [`deploy/preflight.sh`](deploy/preflight.sh) | 部署前环境探测（只读）：端口占用、域名是否被占、GitHub 连通性、已有部署痕迹 |
 | [`deploy/install.sh`](deploy/install.sh) | 服务器一键部署：装依赖 + 取码 + 构建 + nginx 或并入 Caddy + HTTPS + 自动更新（幂等，支持 `DRY_RUN=1`） |
 | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | 从 GitHub Actions 一键部署到服务器并自动验收（需配 3 个 secret） |
+| [`docs/ashrae-checklist.md`](docs/ashrae-checklist.md) | 内置气候值复核清单（8 站 × 5 值），对外发布前逐格核对 |
 | [`eval/`](eval/) | 智能助手 LLM 解析路径评测：真实提示词 → 模型 → 校验 → 执行，七维打分 + 反向对照 |
 
 ## 快速开始
@@ -80,6 +81,9 @@ r = run_scenario("C", "boston", scenario="winter_typical", days=3.0)
 - **C V1.44 复刻**：外温分箱 × 昼/夜负荷系数学习（7 天采样中心值法 + 70% 信赖区间）、目标运转时间 TA、能力恒定外推预测、UP/DOWN 滞环信号、Tes/Tcs 分箱保存（制冷/制热双模式）
 
 算法层严格遵守信息边界：只能看到 thermo-on/off 时序、室外温度与外机自测能力（可注入 Gr×Δh 测量偏差）；室温、湿度、设定值、回差仅对温控器/房间模型可见。
+
+> **基线不可变**：A / B / C 三条是对照基准，尤其 **C（V1.44 复刻）代表现网算法，任何改进都不得修改它**。
+> 算法改进一律以新增算法臂（D / E / F …）的形式并列存在，这样每次对比才有稳定的参照物。
 
 ## 数据来源声明
 
