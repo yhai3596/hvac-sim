@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 在服务器上一键部署空调控制算法仿真平台（静态站点 + 可选的大模型 API 反代）。
 #
-#   curl -fsSL https://raw.githubusercontent.com/yhai3596/-/claude/ac-control-algorithm-simulation-zivkl0/deploy/install.sh -o install.sh
+#   curl -fsSL https://raw.githubusercontent.com/yhai3596/hvac-sim/claude/ac-control-algorithm-simulation-zivkl0/deploy/install.sh -o install.sh
 #   sudo DOMAIN=hvac.geopro.top EMAIL=you@example.com bash install.sh
 #
 # 幂等：重复执行只做增量（已存在的仓库走 git pull，已签发的证书不重复申请）。
@@ -18,7 +18,7 @@ set -euo pipefail
 DOMAIN="${DOMAIN:-}"
 EMAIL="${EMAIL:-}"
 APP_DIR="${APP_DIR:-/opt/hvac-sim}"
-REPO="${REPO:-https://github.com/yhai3596/-.git}"
+REPO="${REPO:-https://github.com/yhai3596/hvac-sim.git}"
 BRANCH="${BRANCH:-claude/ac-control-algorithm-simulation-zivkl0}"
 ENV_FILE="${ENV_FILE:-/etc/hvac-sim/api.env}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
@@ -107,7 +107,7 @@ else
       rm -f /tmp/hvac-src.tgz
       die "服务器既连不上 github.com 也下不到源码包。可行做法：
   1) 在能访问 GitHub 的机器上克隆后打包传过来：
-       git clone https://github.com/yhai3596/-.git hvac-sim
+       git clone https://github.com/yhai3596/hvac-sim.git
        tar czf hvac.tgz -C hvac-sim .
        scp hvac.tgz 用户名@服务器IP:/tmp/
      然后在服务器上：

@@ -33,8 +33,7 @@
 ## 快速开始
 
 ```bash
-# 仓库名是单个连字符，克隆时请指定目录名（否则 cd - 会被 shell 当成"回到上一个目录"）
-git clone https://github.com/yhai3596/-.git hvac-sim && cd hvac-sim
+git clone https://github.com/yhai3596/hvac-sim.git && cd hvac-sim
 
 python3 web/launch.py            # 拉最新代码 + 构建 + 在 http://127.0.0.1:8000 打开仿真台
 python3 web/serve.py             # 同上但不检查更新

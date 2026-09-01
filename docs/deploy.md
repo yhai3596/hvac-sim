@@ -17,15 +17,9 @@ Windows 上如果 `python3` 不识别，把命令里的 `python3` 换成 `python
 第一次要先把仓库拿下来（只需一次）：
 
 ```bash
-git clone https://github.com/yhai3596/-.git hvac-sim
+git clone https://github.com/yhai3596/hvac-sim.git
 cd hvac-sim
 ```
-
-> **克隆时务必指定目录名。** 本仓库名是单个连字符 `-`，直接 `git clone …/-.git` 会得到一个
-> 名为 `-` 的目录，而 `cd -` 在 bash/zsh 里是「回到上一个目录」的内置语义、**不会**进入这个
-> 目录（`cd -- -` 同样无效，bash 对 `-` 的特判在 `--` 之后）。若已经克隆成了 `-`，用
-> `cd ./-` 或 `cd "$PWD/-"` 进入，或者不进目录直接 `python3 ./-/web/serve.py`——
-> `serve.py` 的路径由自身位置推出，在哪个工作目录运行都可以。
 
 之后每次使用，两种方式二选一。
 
@@ -39,7 +33,7 @@ cd hvac-sim
 启动器做三件事：`git pull` 拉最新代码 → 构建 `dist/index.html` → 起本地服务并打开浏览器。
 更新失败（没联网、本地改过文件等）只会打印一行提示，**不会阻断启动**，照常用旧版本。
 把它拖到 Dock / 发送到桌面快捷方式，就是一个"双击即用"的入口。启动器和 `serve.py` 一样
-从自身位置推出仓库路径，所以哪怕上面那个坑没绕开、目录真的叫 `-`，双击照样能跑。
+从自身位置推出仓库路径，所以仓库放在哪个目录、从哪个工作目录调用都不影响。
 
 **方式二：命令行**
 
@@ -327,7 +321,7 @@ Debian/Ubuntu 与 CentOS/RHEL/TencentOS（自动识别 apt / dnf / yum）。
 **执行**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yhai3596/-/claude/ac-control-algorithm-simulation-zivkl0/deploy/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/yhai3596/hvac-sim/claude/ac-control-algorithm-simulation-zivkl0/deploy/install.sh -o install.sh
 less install.sh                       # 建议先扫一眼再跑
 sudo DOMAIN=你的域名 EMAIL=你的邮箱 bash install.sh
 ```
@@ -358,7 +352,7 @@ sudo DOMAIN=你的域名 EMAIL=你的邮箱 bash install.sh
 >
 > ```bash
 > # 本地（能上 GitHub 的机器）
-> git clone https://github.com/yhai3596/-.git hvac-sim
+> git clone https://github.com/yhai3596/hvac-sim.git
 > tar czf hvac.tgz -C hvac-sim .
 > scp hvac.tgz 用户名@服务器IP:/tmp/
 >
