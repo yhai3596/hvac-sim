@@ -43,11 +43,25 @@
 > 5. **不要关闭 TLS 校验、不要 `-k`、不要改 hosts 绕过问题。** 连不上就换取码路径。
 > 6. **不确定就先探测再动手**，不要凭猜测改配置。一次给一条命令，等结果。
 > 7. 云控制台的安全组你我都改不了，需要放行 80/443 时明确提示我去点。
+> 8. **一句报错往往盖住好几种原因，先加诊断，别逐个猜着改。** 例如 `error in libcrypto`
+>    可能是私钥带 CRLF、被挤成一行、漏了 `BEGIN`/`END`、带口令、是 `.ppk`、粘贴时截断——
+>    盲改一轮只能排除一种。正确做法是先让我跑一条能把「形状」打出来的命令（行数、首尾标识行、
+>    `ssh -vv` 的协商摘要、服务器的 `journalctl -u ssh`），一次定位到那一种再动手。
+> 9. **给命令一律写绝对路径，不要用 `~`。** 我贴给你的提示符可能是 `ubuntu@`，那里的 `~` 是
+>    `/home/ubuntu`；而部署工具默认以 root 登录，读的是 `/root/...`。这次就因此白跑了三轮：
+>    公钥进了 `/home/ubuntu/.ssh/authorized_keys`，而 `/root/.ssh/authorized_keys` 是 0 字节。
+> 10. **说"某机制正在生效"之前，先证明它存在。** 不要从旁证反推（"文件更新了，所以定时任务在跑"）。
+>    要断言 timer 在工作就让我跑 `systemctl list-timers hvac-sim-update.timer --all`；空表就是没有。
+>    基于未经核实的推断给出的方案，往往整条都不成立。
 >
 > ### 三个决策点（用探测结果回答，不要问我）
 >
-> - **代码怎么上服务器**：`github.com` 通 → git clone；只有 `codeload.github.com` 通 → 拉源码包；
->   都不通 → 我在本地打包 scp 过去，然后用 `SRC_DIR=` 离线安装。只有 git 那条支持自动更新 timer。
+> - **代码怎么上服务器**：仓库已配好 GitHub Actions 部署（`DEPLOY_HOST` / `DEPLOY_SSH_KEY` /
+>   `DEPLOY_DOMAIN` 三个 secret 齐全）→ 直接走它，服务器全程不需要访问 github.com；否则
+>   `github.com` 通 → git clone；只有 `codeload.github.com` 通 → 拉源码包；都不通 → 我在本地打包
+>   scp 过去，然后用 `SRC_DIR=` 离线安装。
+>   **只有 `$APP_DIR` 是 git 工作副本时才会装自动更新 timer**：源码包与 Actions 这两条路都没有，
+>   它们的更新方式就是把部署再跑一次。
 > - **用哪个 web 服务器**：80/443 空闲 → nginx + certbot；被 Caddy 占 → 并入 Caddy（不装 certbot，
 >   证书 Caddy 自动签）；被别的占 → 停下来问我。
 > - **证书**：nginx 走 certbot；Caddy 自己管。DNS 没生效就先 `SKIP_TLS=1` 跑 HTTP，之后重跑补签。
@@ -62,6 +76,9 @@
 > | 站点打开是 Caddy/nginx 默认欢迎页 | ① 域名可能已写在别人的站点块地址列表里，要先摘出来；② 站点块只写域名时 HTTP 侧会被 `:80` 兜底块截胡，需显式写 `http://域名 { redir https://{host}{uri} }` |
 > | 非交互执行卡死 | `sudo` 在要密码，先 `sudo -n true` 验证 |
 > | 部署成功但外网打不开 | 安全组没放行；先让我在服务器上 `curl -I http://127.0.0.1/` 区分是本机问题还是网络问题 |
+> | Actions 部署报 `Load key ...: error in libcrypto` | `DEPLOY_SSH_KEY` 不是能解析的私钥。见硬规则 8：先看工作流打印的「形状」（非空行数、首尾标识行），再判断是哪一种 |
+> | Actions 部署报 `Permission denied (publickey,password)` | 公钥不在 `DEPLOY_USER`（**未设时是 root**）的 `authorized_keys` 里。让我跑 `sudo ssh-keygen -lf /root/.ssh/authorized_keys` 比对指纹、`sudo journalctl -u ssh -n 50` 看拒绝原因、`sudo sshd -T \| grep -i permitrootlogin` 确认没被禁 |
+> | 页面还是旧的，但部署报成功 | 别只看"部署成功"。用响应头核对：`curl -sSI https://域名/ \| grep -Ei 'content-length\|last-modified'`，`last-modified` 应是本次部署时刻 |
 >
 > ### 完成标准
 >
@@ -72,10 +89,12 @@
 > curl -sS https://域名/ | grep -c '空调控制算法'         # ≥1，证明是本项目页面
 > curl -sSI https://域名/ | grep -i content-type          # 带 charset
 > curl -sSI http://域名/ | head -3                        # 301/308 跳 HTTPS
+> curl -sSI https://域名/ | grep -i last-modified         # 应是本次部署的时刻，不是上一版
 > ```
 >
 > 全过之后，用一段话告诉我：站点地址、代码放在哪、怎么更新、以及哪些事情还需要我自己做
-> （比如安全组、证书续期是否自动、自动更新是否可用）。
+> （比如安全组、证书续期是否自动、自动更新是否可用）。**"自动更新是否可用"要按硬规则 10
+> 实际查过再答**，不要写"应该会自动更新"。
 
 ---
 
@@ -91,3 +110,6 @@
 | 服务起来≠部署成功 | 服务正常、校验通过、日志无错，页面却是 Caddy 欢迎页 |
 | 改配置先备份后校验 | 主 Caddyfile 上跑着 7 个生产域名，改坏了是事故 |
 | 去掉 `curl -s` | 一条卡住的命令看不出任何症状，白白浪费一轮 |
+| 先加诊断再改 | 配 Actions 部署失败 6 次，前几次都在盲猜 `error in libcrypto` 是哪一种；补上「打印形状」的诊断后，一次就定位到「只贴了 key 体、漏了 BEGIN/END 两行」 |
+| 写绝对路径 | 给出的命令用了 `~/.ssh/authorized_keys`，在 `ubuntu@` 提示符下落到了 `/home/ubuntu`，而部署以 root 登录读 `/root`，白跑三轮 |
+| 先证明机制存在 | 从"dist 被重建过"推断自动更新 timer 在跑，据此给了一套方案；实际 `systemctl list-timers` 是空的，timer 根本不存在，那套方案整条不成立 |
