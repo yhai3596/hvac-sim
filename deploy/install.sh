@@ -39,21 +39,46 @@ run() {
 [ -n "$DOMAIN" ] || die "必须指定域名，例如：sudo DOMAIN=hvac.geopro.top bash install.sh"
 if [ "$DRY_RUN" != "1" ] && [ "$(id -u)" != "0" ]; then die "请用 root 或 sudo 执行"; fi
 
+# ---------- 0. 用哪个 web 服务器 ----------
+# 机器上可能已经跑着 Caddy（很多面板和现成环境都是），那就把站点并进它，
+# 而不是让 nginx 去抢 80/443——抢不到，还会留下一个起不来的服务。
+detect_webserver() {
+  if [ "${WEBSERVER:-auto}" != "auto" ]; then printf '%s' "$WEBSERVER"; return; fi
+  if command -v ss >/dev/null 2>&1 && ss -lntp 2>/dev/null | grep -q '"caddy"'; then
+    printf 'caddy'; return
+  fi
+  if command -v caddy >/dev/null 2>&1 && systemctl is-active --quiet caddy 2>/dev/null; then
+    printf 'caddy'; return
+  fi
+  printf 'nginx'
+}
+WEB=$(detect_webserver)
+
 # ---------- 1. 装依赖 ----------
-say "1/6 安装依赖（git / python3 / nginx / certbot）"
+say "1/6 安装依赖"
+if [ "$WEB" = "caddy" ]; then
+  info "检测到本机已在用 Caddy，站点将并入 Caddy（证书由它自动签发，不装 certbot）"
+  WEB_PKGS=""
+else
+  WEB_PKGS="nginx"
+fi
 if command -v apt-get >/dev/null 2>&1; then
   PKG=apt
   run env DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git python3 nginx
-  [ "$SKIP_TLS" = "1" ] || run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq certbot python3-certbot-nginx
+  run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git python3 $WEB_PKGS
+  if [ "$WEB" = "nginx" ] && [ "$SKIP_TLS" != "1" ]; then
+    run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq certbot python3-certbot-nginx
+  fi
 elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
   PKG=$(command -v dnf >/dev/null 2>&1 && echo dnf || echo yum)
-  run "$PKG" install -y -q git python3 nginx
-  [ "$SKIP_TLS" = "1" ] || run "$PKG" install -y -q certbot python3-certbot-nginx
+  run "$PKG" install -y -q git python3 $WEB_PKGS
+  if [ "$WEB" = "nginx" ] && [ "$SKIP_TLS" != "1" ]; then
+    run "$PKG" install -y -q certbot python3-certbot-nginx
+  fi
 else
-  die "没找到 apt/dnf/yum，请手动安装 git、python3、nginx（可选 certbot）后重跑"
+  die "没找到 apt/dnf/yum，请手动安装 git、python3（以及 nginx 或 caddy）后重跑"
 fi
-info "包管理器：$PKG"
+info "包管理器：$PKG，web 服务器：$WEB"
 
 # ---------- 2. 取代码 ----------
 # 三条取码路径，按可靠性从高到低尝试。国内服务器常常连不上 github.com（表现为
@@ -126,8 +151,100 @@ say "3/6 构建 dist/index.html"
 python3 "$APP_DIR/web/serve.py" --build
 chmod 755 "$APP_DIR/dist"; chmod 644 "$APP_DIR/dist/index.html"
 
-# ---------- 4. nginx ----------
-say "4/6 写 nginx 站点配置"
+# ---------- 4. web 服务器站点配置 ----------
+say "4/6 写站点配置（$WEB）"
+
+configure_caddy() {
+  # 并入已有的 Caddy：单独写一个站点文件，再确保主 Caddyfile 会 import 它。
+  # 全程不改动别人已有的站点块，改完先 validate，通过才 reload。
+  CADDY_DIR="${CADDY_DIR:-/etc/caddy}"
+  CADDY_MAIN="$CADDY_DIR/Caddyfile"
+  [ -f "$CADDY_MAIN" ] || die "找不到 $CADDY_MAIN。若 Caddy 由面板或容器托管，请手动加一段：
+  $DOMAIN {
+      root * $APP_DIR/dist
+      file_server
+      encode gzip
+  }"
+  CADDY_SITE="$CADDY_DIR/hvac-sim.caddyfile"
+
+  CADDY_API=""
+  if [ -f "$ENV_FILE" ]; then
+    CADDY_API="
+    # 大模型 API 反代：真实 Key 只在 $ENV_FILE 里，浏览器拿不到
+    handle /api/* {
+        reverse_proxy 127.0.0.1:$PROXY_PORT {
+            transport http {
+                read_timeout 300s    # 生成报告可能要一两分钟
+            }
+        }
+    }
+"
+  fi
+
+  cat > "$CADDY_SITE" <<CADDY
+# 由 deploy/install.sh 生成，重跑脚本会覆盖本文件。证书由 Caddy 自动申请与续期。
+$DOMAIN {
+    root * $APP_DIR/dist
+    encode gzip
+    header /index.html Cache-Control "no-store"   # 更新后刷新即生效
+$CADDY_API
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
+}
+CADDY
+  info "已写入 $CADDY_SITE"
+
+  # 确保主配置真的会加载它。不靠猜 import 写法——直接用 caddy adapt 展开有效配置，
+  # 看域名在不在里面，这是唯一靠得住的判据。
+  caddy_has_domain() {
+    caddy adapt --config "$CADDY_MAIN" --adapter caddyfile 2>/dev/null | grep -q "$DOMAIN"
+  }
+  add_import() {
+    cp -a "$CADDY_MAIN" "$CADDY_MAIN.bak-$(date +%Y%m%d%H%M%S)"
+    if grep -qE '^[[:space:]]*#[[:space:]]*import[[:space:]]+.*\.caddyfile' "$CADDY_MAIN"; then
+      sed -i -E 's|^[[:space:]]*#[[:space:]]*(import[[:space:]]+.*\.caddyfile)|\1|' "$CADDY_MAIN"
+      info "已启用主 Caddyfile 里原有的 import 行（原文件已备份）"
+    else
+      printf '\n# 由 deploy/install.sh 追加\nimport %s/*.caddyfile\n' "$CADDY_DIR" >> "$CADDY_MAIN"
+      info "已在主 Caddyfile 末尾追加 import 行（原文件已备份）"
+    fi
+  }
+
+  if [ "$DRY_RUN" = "1" ]; then
+    run add_import
+    run caddy validate --config "$CADDY_MAIN" --adapter caddyfile
+    run systemctl reload caddy
+    return
+  fi
+
+  if caddy_has_domain; then
+    info "主 Caddyfile 已经能加载到本站点，无需改动"
+  else
+    add_import
+    caddy_has_domain || die "加了 import 之后 $DOMAIN 仍然不在展开后的配置里。
+请手动在 $CADDY_MAIN 里加一行：import $CADDY_DIR/*.caddyfile
+（原文件备份在 $CADDY_MAIN.bak-*，站点配置已写好在 $CADDY_SITE）"
+    info "已确认 $DOMAIN 出现在展开后的配置里"
+  fi
+
+  if ! caddy validate --config "$CADDY_MAIN" --adapter caddyfile >/tmp/caddy-validate.log 2>&1; then
+    tail -20 /tmp/caddy-validate.log | sed 's/^/    /'
+    die "Caddy 配置校验没通过，已中止（没有 reload，现有站点不受影响）。
+上面是 caddy validate 的输出；主配置的备份在 $CADDY_MAIN.bak-*"
+  fi
+  info "caddy validate 通过"
+  systemctl reload caddy || die "caddy reload 失败：systemctl status caddy 看详情"
+  info "Caddy 已重载，$DOMAIN 的证书由它自动申请（首次可能要等几十秒）"
+  # 前面若误装了 nginx，它抢不到端口只会一直起不来，关掉免得开机报错
+  if systemctl is-enabled --quiet nginx 2>/dev/null; then
+    systemctl disable --now nginx >/dev/null 2>&1 || true
+    info "顺手停用了抢不到端口的 nginx"
+  fi
+}
+
+configure_nginx() {
 if [ -d /etc/nginx/sites-enabled ]; then
   NGINX_DIR="${NGINX_DIR:-/etc/nginx/sites-available}"; NGINX_LINK=1
 else
@@ -213,6 +330,9 @@ else
   systemctl enable nginx >/dev/null 2>&1 || true
   systemctl restart nginx || nginx_fail
 fi
+}
+
+if [ "$WEB" = "caddy" ]; then configure_caddy; else configure_nginx; fi
 
 # ---------- 5. 可选：大模型 API 反代 ----------
 say "5/6 大模型 API 反代"
@@ -246,7 +366,9 @@ fi
 
 # ---------- 6. 证书 + 自动更新 ----------
 say "6/6 HTTPS 与自动更新"
-if [ "$SKIP_TLS" = "1" ]; then
+if [ "$WEB" = "caddy" ]; then
+  info "证书由 Caddy 自动申请与续期，无需 certbot"
+elif [ "$SKIP_TLS" = "1" ]; then
   info "SKIP_TLS=1，跳过证书申请"
 else
   RESOLVED=$(getent hosts "$DOMAIN" | awk '{print $1}' | head -1 || true)

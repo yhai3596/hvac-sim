@@ -333,9 +333,16 @@ sudo DOMAIN=你的域名 EMAIL=你的邮箱 bash install.sh
 | 1 | 装 git / python3 / nginx / certbot |
 | 2 | 克隆或更新代码到 `/opt/hvac-sim`（已存在则 `git reset --hard` 到远端，服务器按只读部署对待） |
 | 3 | `python3 web/serve.py --build` 产出 `dist/index.html` |
-| 4 | 写 nginx 站点（`charset utf-8`、gzip、`index.html` 不缓存、ACME 目录），`nginx -t` 通过才 reload |
+| 4 | 写站点配置。**机器上已经在跑 Caddy 就并入 Caddy**（单独一个 `hvac-sim.caddyfile` + 主配置的 import，证书由 Caddy 自动签发），否则写 nginx 站点（`charset utf-8`、gzip、`index.html` 不缓存、ACME 目录）。两种都是校验通过才 reload |
 | 5 | 若存在 `/etc/hvac-sim/api.env` 则装大模型 API 反代服务（只监听 127.0.0.1，公网只能经 nginx 的 `/api/` 走） |
 | 6 | certbot 申请证书并开启 80→443 跳转；装每 30 分钟拉取更新的 systemd timer |
+
+> **机器上已经有别的 web 服务在用 80/443 怎么办**：脚本会先探测。发现 Caddy 在监听就自动
+> 并入它——写一个独立的 `/etc/caddy/hvac-sim.caddyfile`，再确认主 Caddyfile 能加载到它
+> （判据是 `caddy adapt` 展开后的配置里有没有你的域名，不靠猜 import 写法），改动前备份、
+> `caddy validate` 通过才 reload，全程不碰别人已有的站点块；证书由 Caddy 自动申请，不装
+> certbot。`WEBSERVER=nginx|caddy` 可以强制指定。若 80 被 Caddy 以外的服务占着，脚本会把
+> 端口占用情况打出来让你自己决定，而不是硬抢。
 
 常用开关：`SKIP_TLS=1` 只配 HTTP（DNS 还没生效时先这样，解析好后重跑补证书）、
 `AUTO_UPDATE=0` 不装自动更新、`APP_DIR=` 换目录、`BRANCH=` 换分支、
