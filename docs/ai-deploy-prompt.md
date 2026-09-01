@@ -25,7 +25,7 @@
 > ```
 >
 > 拿不到仓库时用：
-> `curl -fL -o /tmp/p.sh https://raw.githubusercontent.com/yhai3596/hvac-sim/<分支>/deploy/preflight.sh && bash /tmp/p.sh 我的域名`
+> `curl -fL -o /tmp/p.sh https://raw.githubusercontent.com/yhai3596/hvac-sim/main/deploy/preflight.sh && bash /tmp/p.sh 我的域名`
 >
 > 在看到探测结果之前，**不要**让我执行任何会改动系统的命令。
 >
