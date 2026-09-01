@@ -204,43 +204,82 @@ $CADDY_API
 CADDY
   info "已写入 $CADDY_SITE"
 
-  # 确保主配置真的会加载它。不靠猜 import 写法——直接用 caddy adapt 展开有效配置，
-  # 看域名在不在里面，这是唯一靠得住的判据。
-  caddy_has_domain() {
-    caddy adapt --config "$CADDY_MAIN" --adapter caddyfile 2>/dev/null | grep -q "$DOMAIN"
+  # 主配置里若已经把本域名写在别的站点块的地址列表里（很常见：一个块列一串域名
+  # 统统指向欢迎页），那个块会接管本域名，我们的文件再怎么 import 也不生效，
+  # 同名两处还会让 Caddy 报站点冲突。所以先把域名从那里摘出来。
+  strip_domain_from_main() {
+    python3 - "$CADDY_MAIN" "$DOMAIN" <<'PY'
+import sys
+path, domain = sys.argv[1], sys.argv[2]
+lines = open(path, encoding="utf-8").read().splitlines(keepends=True)
+out, changed = [], False
+for ln in lines:
+    if "{" in ln and domain in ln and not ln.lstrip().startswith("#"):
+        addr, rest = ln.split("{", 1)
+        items = [a.strip() for a in addr.split(",") if a.strip()]
+        if domain in items:
+            items = [a for a in items if a != domain]
+            if not items:                      # 整个块只服务这一个域名，不敢替用户删块
+                print("ONLY_ADDRESS"); sys.exit(2)
+            ln = ", ".join(items) + " {" + rest
+            changed = True
+    out.append(ln)
+if changed:
+    open(path, "w", encoding="utf-8").write("".join(out))
+print("CHANGED" if changed else "NOCHANGE")
+PY
   }
+
   add_import() {
-    cp -a "$CADDY_MAIN" "$CADDY_MAIN.bak-$(date +%Y%m%d%H%M%S)"
-    if grep -qE '^[[:space:]]*#[[:space:]]*import[[:space:]]+.*\.caddyfile' "$CADDY_MAIN"; then
+    if grep -qE '^[[:space:]]*import[[:space:]]+.*\.caddyfile' "$CADDY_MAIN"; then
+      info "主 Caddyfile 已有 import 行"
+    elif grep -qE '^[[:space:]]*#[[:space:]]*import[[:space:]]+.*\.caddyfile' "$CADDY_MAIN"; then
       sed -i -E 's|^[[:space:]]*#[[:space:]]*(import[[:space:]]+.*\.caddyfile)|\1|' "$CADDY_MAIN"
-      info "已启用主 Caddyfile 里原有的 import 行（原文件已备份）"
+      info "已启用主 Caddyfile 里原有的 import 行"
     else
       printf '\n# 由 deploy/install.sh 追加\nimport %s/*.caddyfile\n' "$CADDY_DIR" >> "$CADDY_MAIN"
-      info "已在主 Caddyfile 末尾追加 import 行（原文件已备份）"
+      info "已在主 Caddyfile 末尾追加 import 行"
     fi
   }
 
   if [ "$DRY_RUN" = "1" ]; then
+    run strip_domain_from_main
     run add_import
     run caddy validate --config "$CADDY_MAIN" --adapter caddyfile
     run systemctl reload caddy
     return
   fi
 
-  if caddy_has_domain; then
-    info "主 Caddyfile 已经能加载到本站点，无需改动"
-  else
-    add_import
-    caddy_has_domain || die "加了 import 之后 $DOMAIN 仍然不在展开后的配置里。
-请手动在 $CADDY_MAIN 里加一行：import $CADDY_DIR/*.caddyfile
-（原文件备份在 $CADDY_MAIN.bak-*，站点配置已写好在 $CADDY_SITE）"
-    info "已确认 $DOMAIN 出现在展开后的配置里"
+  BACKUP="$CADDY_MAIN.bak-$(date +%Y%m%d%H%M%S)"
+  cp -a "$CADDY_MAIN" "$BACKUP"
+  info "主 Caddyfile 已备份到 $BACKUP"
+
+  set +e; strip_out=$(strip_domain_from_main); strip_rc=$?; set -e
+  case "$strip_rc:$strip_out" in
+    2:*|*ONLY_ADDRESS*)
+      die "$DOMAIN 是主 Caddyfile 里某个站点块唯一的域名，不敢替你删除整块。
+请手动把那个块删掉或改名，然后重跑本脚本。备份：$BACKUP" ;;
+    0:CHANGED) info "已把 $DOMAIN 从主 Caddyfile 原有的站点块中摘出" ;;
+    0:NOCHANGE) : ;;
+    *) die "处理主 Caddyfile 失败（$strip_out）。备份：$BACKUP" ;;
+  esac
+
+  add_import
+
+  # 判据不能只看域名在不在——它可能来自别人的块。看我们的 root 路径在不在，
+  # 那是只有本站点文件才会出现的字符串。
+  if ! caddy adapt --config "$CADDY_MAIN" --adapter caddyfile 2>/dev/null | grep -q "$APP_DIR/dist"; then
+    cp -a "$BACKUP" "$CADDY_MAIN"
+    die "展开后的配置里找不到本站点的根目录 $APP_DIR/dist，说明 $CADDY_SITE 没被加载。
+已把主 Caddyfile 还原成改动前的样子。请手动在 $CADDY_MAIN 里加一行：
+  import $CADDY_DIR/*.caddyfile"
   fi
+  info "已确认 $DOMAIN 由本站点文件接管（展开后的配置里有 $APP_DIR/dist）"
 
   if ! caddy validate --config "$CADDY_MAIN" --adapter caddyfile >/tmp/caddy-validate.log 2>&1; then
     tail -20 /tmp/caddy-validate.log | sed 's/^/    /'
-    die "Caddy 配置校验没通过，已中止（没有 reload，现有站点不受影响）。
-上面是 caddy validate 的输出；主配置的备份在 $CADDY_MAIN.bak-*"
+    cp -a "$BACKUP" "$CADDY_MAIN"
+    die "Caddy 配置校验没通过，已把主 Caddyfile 还原（没有 reload，现有站点不受影响）"
   fi
   info "caddy validate 通过"
   systemctl reload caddy || die "caddy reload 失败：systemctl status caddy 看详情"
