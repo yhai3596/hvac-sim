@@ -80,6 +80,22 @@ jobs:
           if ! ssh-keygen -y -P "" -f ~/.ssh/id_deploy > ~/.ssh/id_deploy.pub 2>/tmp/keyerr </dev/null; then
             echo "::error::DEPLOY_SSH_KEY 解析失败：$(tr '\n' ' ' < /tmp/keyerr)"
             echo "::error::常见原因：私钥带口令（部署密钥请用无口令的）；只粘了 key 体没带 BEGIN/END 行；粘的是 PuTTY 的 .ppk（需先用 puttygen 导出 OpenSSH 格式）"
+            # 只报「形状」，足以判断是哪种格式问题，又不会把 key 体印进日志：
+            # 首尾行仅在是已知标识行时才原样打印，其余一律折叠成长度
+            shape() {
+              case "$1" in
+                -----BEGIN*|-----END*|PuTTY-User-Key-File*|Encryption:*|Proc-Type:*|DEK-Info:*|ssh-*|ecdsa-*)
+                  printf '%s' "$1" ;;
+                *) printf '（非标识行，已隐去，长度 %s）' "${#1}" ;;
+              esac
+            }
+            echo "  非空行数：$(grep -c . ~/.ssh/id_deploy)"
+            echo "  首行：$(shape "$(head -1 ~/.ssh/id_deploy)")"
+            echo "  末行：$(shape "$(grep -v '^$' ~/.ssh/id_deploy | tail -1)")"
+            echo "  首尾都是 BEGIN/END 却仍解析不了，通常是粘贴时截断或中间少了行；"
+            echo "  最省事的做法是新生成一把无口令部署密钥："
+            echo "    ssh-keygen -t ed25519 -N '' -C github-actions -f deploy_key"
+            echo "    # deploy_key.pub 追加到服务器 ~/.ssh/authorized_keys，deploy_key 全文贴进 DEPLOY_SSH_KEY"
             exit 1
           fi
           echo "私钥 OK：$(ssh-keygen -lf ~/.ssh/id_deploy.pub)"
