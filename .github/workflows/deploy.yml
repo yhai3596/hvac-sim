@@ -153,6 +153,10 @@ jobs:
           scp -i ~/.ssh/id_deploy -P "$P" -o BatchMode=yes /tmp/payload.tgz "$U@$HOST:/tmp/hvac-payload.tgz"
           ssh -i ~/.ssh/id_deploy -p "$P" -o BatchMode=yes "$U@$HOST" bash -s <<REMOTE
           set -e
+          if ! sudo -n true 2>/dev/null; then
+            echo "::error::远端用户 $U 的 sudo 需要密码，非交互部署提不了权：给它配 NOPASSWD，或把 DEPLOY_USER 设成 root"
+            exit 1
+          fi
           rm -rf /tmp/hvac-src && mkdir -p /tmp/hvac-src
           tar xzf /tmp/hvac-payload.tgz -C /tmp/hvac-src
           rm -f /tmp/hvac-payload.tgz
