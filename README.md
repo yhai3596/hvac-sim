@@ -26,7 +26,10 @@
 | [`web/launch.py`](web/launch.py) | 双击启动器的实际逻辑：`git pull` 拉最新代码 → 构建 → 起服务（更新失败不阻断） |
 | `启动仿真台.command` / `.bat` | macOS / Windows 双击入口，日常使用不用敲命令 |
 | [`docs/deploy.md`](docs/deploy.md) | 本地使用与服务器部署指南（含 CORS/API Key 的两种处理方式） |
-| [`deploy/install.sh`](deploy/install.sh) | 服务器一键部署：装依赖 + 拉代码 + 构建 + nginx + HTTPS + 自动更新 timer（幂等，支持 `DRY_RUN=1`） |
+| [`docs/runbook-deploy.md`](docs/runbook-deploy.md) | **部署规程**：决策树、标准流程、验收清单、故障速查、回滚 |
+| [`docs/ai-deploy-prompt.md`](docs/ai-deploy-prompt.md) | 交给 AI 协助部署的提示词（把踩过的坑写成硬规则） |
+| [`deploy/preflight.sh`](deploy/preflight.sh) | 部署前环境探测（只读）：端口占用、域名是否被占、GitHub 连通性、已有部署痕迹 |
+| [`deploy/install.sh`](deploy/install.sh) | 服务器一键部署：装依赖 + 取码 + 构建 + nginx 或并入 Caddy + HTTPS + 自动更新（幂等，支持 `DRY_RUN=1`） |
 | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | 从 GitHub Actions 一键部署到服务器并自动验收（需配 3 个 secret） |
 | [`eval/`](eval/) | 智能助手 LLM 解析路径评测：真实提示词 → 模型 → 校验 → 执行，七维打分 + 反向对照 |
 

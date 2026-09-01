@@ -312,6 +312,10 @@ rsync -a dist/ user@server:/var/www/ac-sim/     # 或你惯用的发布方式
 前面几节讲的是"怎么做"，`deploy/install.sh` 把它们串成了一条可重复执行的命令。适用于
 Debian/Ubuntu 与 CentOS/RHEL/TencentOS（自动识别 apt / dnf / yum）。
 
+> 完整的部署规程（决策树、验收清单、故障速查、回滚）见 [`runbook-deploy.md`](runbook-deploy.md)；
+> 要让 AI 协助部署，把 [`ai-deploy-prompt.md`](ai-deploy-prompt.md) 里的提示词整段发给它。
+> **开跑前先 `bash deploy/preflight.sh 你的域名`**——只读探测，30 秒把这台机器的情况摸清楚。
+
 **先决条件**
 
 1. 域名的 A 记录已指向服务器公网 IP（`getent hosts 你的域名` 能返回该 IP）；
